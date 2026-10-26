@@ -215,10 +215,8 @@ public class MLRelationPredictor {
             String genericType = field.genericType();
             String baseType = field.type();
             
-            // Check if field references the destination class
-            if (destino.equals(genericType) || 
-                baseType.contains(destino) ||
-                baseType.equals(destino)) {
+            // El tipo debe nombrar la clase como identificador completo: "UserRole" no referencia a "User"
+            if (destino.equals(genericType) || TypeNames.references(baseType, destino)) {
                 return field;
             }
         }

@@ -98,9 +98,11 @@ public class FeatureExtractor {
         // === Name Features (0-7) ===
         features[0] = jaroWinkler(safeOrigen, safeDestino, origenLower, destinoLower);
         features[1] = levenshteinSimilarity(safeOrigen, safeDestino, origenLower, destinoLower);
-        // Las features 2 y 7 son hoy la misma medida: se calcula una sola vez
+        // Feature 2: similitud del nombre del campo con la clase destino (Jaro-Winkler).
+        // Antes repetía la feature 7 (calculateConsistency) y el modelo tenía dos columnas iguales.
+        features[2] = jaroWinkler(safeFieldName, safeDestino,
+            safeFieldName.toLowerCase(Locale.ROOT), destinoLower);
         double consistency = namingAnalyzer.calculateConsistency(safeFieldName, safeDestino);
-        features[2] = consistency;
         features[3] = namingAnalyzer.hasIdSuffix(safeFieldName) ? 1.0 : 0.0;
         features[4] = namingAnalyzer.hasCollectionSuffix(safeFieldName) ? 1.0 : 0.0;
         features[5] = namingAnalyzer.isPlural(safeFieldName) ? 1.0 : 0.0;

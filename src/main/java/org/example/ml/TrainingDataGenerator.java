@@ -7,7 +7,6 @@ import java.util.Map;
 import java.util.logging.Logger;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-
 import org.example.config.ConfigManager;
 import org.example.service.MemoryService;
 
@@ -244,8 +243,8 @@ public class TrainingDataGenerator {
             .filter(f -> {
                 String type = f.type();
                 String genericType = f.genericType();
-                return type.equals(targetClassName) || 
-                       type.contains(targetClassName) ||
+                // Mismo criterio que MLRelationPredictor: identificador completo, no subcadena
+                return TypeNames.references(type, targetClassName) ||
                        (genericType != null && genericType.equals(targetClassName));
             })
             .findFirst()
