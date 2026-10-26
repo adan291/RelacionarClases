@@ -14,7 +14,7 @@ import org.apache.commons.text.similarity.JaroWinklerSimilarity;
  */
 public final class SemanticSimilarity {
 
-    private static final JaroWinklerSimilarity jw = new JaroWinklerSimilarity();
+    private static final JaroWinklerSimilarity JARO_WINKLER = new JaroWinklerSimilarity();
 
     // Diccionario de sinónimos básicos
     private static final Map<String, String> SYNONYMS = Map.ofEntries(
@@ -49,7 +49,7 @@ public final class SemanticSimilarity {
         if (a.contains(b) || b.contains(a)) return 0.8;
 
         // 4️⃣ Similaridad léxica (Jaro-Winkler)
-        double lexical = jw.apply(a, b);
+        double lexical = JARO_WINKLER.apply(a, b);
 
         // 5️⃣ Ajuste por distancia de Levenshtein
         double lev = 1.0 - (Levenshtein.distance(a, b) / (double) Math.max(a.length(), b.length()));

@@ -140,7 +140,9 @@ class RelationsApiTest {
                 }
             }
             assertNotNull(postToUser, "Debe sugerir el lado inverso Post -> User ManyToOne");
-            assertEquals("author", postToUser.get("fieldName").getAsString(), "Nombre tomado de authorId");
+            JsonElement fieldName = postToUser.get("fieldName");
+            assertNotNull(fieldName, "La sugerencia trae fieldName");
+            assertEquals("author", fieldName.getAsString(), "Nombre tomado de authorId");
             assertTrue(postToUser.get("bidirectional").getAsBoolean());
             assertTrue(postToUser.has("mappedBy") && postToUser.get("mappedBy").isJsonNull(),
                 "mappedBy aparece como null en el lado dueño");

@@ -32,7 +32,7 @@ import com.google.gson.reflect.TypeToken;
 public class MemoryService {
 
     private static final Logger LOGGER = Logger.getLogger(MemoryService.class.getName());
-    private static final Gson gson = new Gson();
+    private static final Gson GSON = new Gson();
     private static final Type MEMORY_TYPE = new TypeToken<Map<String, String>>() {}.getType();
     
     /** Ruta del fichero; {@code null} en una memoria solo en RAM. */
@@ -93,7 +93,7 @@ public class MemoryService {
         }
 
         try (Reader reader = Files.newBufferedReader(path, StandardCharsets.UTF_8)) {
-            Map<String, String> loaded = gson.fromJson(reader, MEMORY_TYPE);
+            Map<String, String> loaded = GSON.fromJson(reader, MEMORY_TYPE);
             memoria = (loaded != null) ? new HashMap<>(loaded) : new HashMap<>();
             memoria.values().removeIf(v -> v == null);
             final int memoriaSize = memoria.size();
@@ -132,7 +132,7 @@ public class MemoryService {
             }
             tmp = Files.createTempFile(dir, target.getFileName().toString(), ".tmp");
             try (Writer writer = Files.newBufferedWriter(tmp, StandardCharsets.UTF_8)) {
-                gson.toJson(memoria, writer);
+                GSON.toJson(memoria, writer);
             }
             try {
                 Files.move(tmp, target, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);

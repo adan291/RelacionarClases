@@ -40,13 +40,13 @@ public class DetectorRelacionesService {
                 return Collections.emptyList();
             }
 
-            LOGGER.info("Relaciones detectadas: " + relaciones.size());
+            LOGGER.info(() -> "Relaciones detectadas: " + relaciones.size());
             relaciones.forEach(r ->
                     LOGGER.fine(String.format(" - %s -> %s : %s [%.2f]",
                             r.getOrigen(), r.getDestino(), r.getTipo(), r.getConfianza()))
             );
 
-            LOGGER.info("Memoria actual: " + memoryService.getMemoria().size() + " relaciones aprendidas");
+            LOGGER.info(() -> "Memoria actual: " + memoryService.getMemoria().size() + " relaciones aprendidas");
             return relaciones;
 
         } catch (Exception e) {

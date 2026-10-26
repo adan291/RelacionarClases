@@ -59,7 +59,7 @@ public class AnalysisController {
                     onSuccess.run();
                 });
 
-            } catch (Exception ex) {
+            } catch (InterruptedException | RuntimeException ex) {
                 Platform.runLater(() -> {
                     progressLabel.setText("⚠️ Error en análisis");
                     logConsumer.accept("❌ Error durante el análisis: " + ex.getMessage());

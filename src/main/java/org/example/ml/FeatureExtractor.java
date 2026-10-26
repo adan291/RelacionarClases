@@ -276,9 +276,7 @@ public class FeatureExtractor {
         // Check if one extends the other or they share a superclass
         if (sourceSuperClass != null && sourceSuperClass.equals(target.getClassName())) return true;
         if (targetSuperClass != null && targetSuperClass.equals(source.getClassName())) return true;
-        if (sourceSuperClass != null && sourceSuperClass.equals(targetSuperClass)) return true;
-        
-        return false;
+        return sourceSuperClass != null && sourceSuperClass.equals(targetSuperClass);
     }
     
     /**

@@ -250,11 +250,13 @@ public class RelationSuggestionService {
             if (dto == null) {
                 return new Options(DEFAULT_MIN_CONFIDENCE, DEFAULT_MAX_RESULTS, true, true);
             }
-            double min = dto.minConfidence() != null ? dto.minConfidence() : DEFAULT_MIN_CONFIDENCE;
+            Double minConfidence = dto.minConfidence();
+            double min = minConfidence != null ? minConfidence : DEFAULT_MIN_CONFIDENCE;
             if (Double.isNaN(min) || min < 0.0 || min > 1.0) {
                 throw ApiException.badRequest("options.minConfidence debe estar entre 0 y 1");
             }
-            int max = dto.maxResults() != null ? dto.maxResults() : DEFAULT_MAX_RESULTS;
+            Integer maxResults = dto.maxResults();
+            int max = maxResults != null ? maxResults : DEFAULT_MAX_RESULTS;
             if (max < 1 || max > MAX_RESULTS_LIMIT) {
                 throw ApiException.badRequest("options.maxResults debe estar entre 1 y " + MAX_RESULTS_LIMIT);
             }

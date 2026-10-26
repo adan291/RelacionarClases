@@ -82,6 +82,7 @@ public final class RelationsApiServer implements AutoCloseable {
     public static void main(String[] args) throws IOException {
         ApiConfig config = ApiConfig.fromEnv();
         LOGGER.info(() -> "Datos en " + config.dataDir() + "; CORS para " + config.allowedOrigins());
+        // Sin try-with-resources: el servidor debe seguir abierto tras salir de main; lo cierra el shutdown hook
         RelationsApiServer server = create(config).start();
         Runtime.getRuntime().addShutdownHook(new Thread(server::close, "api-shutdown"));
     }

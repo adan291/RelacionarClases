@@ -86,7 +86,7 @@ public class ExistingAnnotationScanner {
                 Optional<AnnotationInfo> annotation = findJPAAnnotation(field);
                 if (annotation.isPresent()) {
                     AnnotationInfo info = annotation.get();
-                    String targetType = extractTargetType(field);
+                    String targetType = extractTargetType(field.getElementType().asString());
                     
                     if (targetType != null && !targetType.isEmpty()) {
                         RelacionDetectada rel = new RelacionDetectada(
@@ -215,12 +215,8 @@ public class ExistingAnnotationScanner {
     }
 
     /**
-     * Extrae el tipo destino de un campo anotado.
+     * Extrae el tipo destino de un tipo de campo anotado.
      */
-    private String extractTargetType(FieldDeclaration field) {
-        return extractTargetType(field.getElementType().asString());
-    }
-
     private static String extractTargetType(String fieldType) {
         // Si es colección, extraer tipo genérico
         if (fieldType.contains("<")) {

@@ -41,11 +41,11 @@ public class RelationAnalysisOrchestrator {
         try {
             File folder = new File(sourcePath);
             if (!folder.exists() || !folder.isDirectory()) {
-                LOGGER.warning("Ruta no válida: " + sourcePath);
+                LOGGER.warning(() -> "Ruta no válida: " + sourcePath);
                 return Collections.emptyList();
             }
 
-            LOGGER.info("Analizando clases en: " + sourcePath);
+            LOGGER.info(() -> "Analizando clases en: " + sourcePath);
 
             List<RelacionDetectada> relaciones = detectorService.ejecutarAnalisis(sourcePath);
 
@@ -55,7 +55,7 @@ public class RelationAnalysisOrchestrator {
                 LOGGER.info("Análisis completado correctamente");
             }
 
-            LOGGER.info("Memoria contiene " + memoryService.getMemoria().size() + " relaciones aprendidas");
+            LOGGER.info(() -> "Memoria contiene " + memoryService.getMemoria().size() + " relaciones aprendidas");
             return relaciones;
 
         } catch (RuntimeException e) {
@@ -79,7 +79,7 @@ public class RelationAnalysisOrchestrator {
             File folder = new File(sourcePath);
             File[] files = folder.listFiles((dir, name) -> name.endsWith(".java"));
             if (files == null || files.length == 0) {
-                LOGGER.warning("No hay archivos .java en: " + sourcePath);
+                LOGGER.warning(() -> "No hay archivos .java en: " + sourcePath);
                 return Collections.emptyList();
             }
 

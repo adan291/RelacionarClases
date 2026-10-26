@@ -198,7 +198,7 @@ public class MLRelationPredictor {
                 }
             } catch (Exception e) {
                 // Skip this prediction if it fails
-                LOGGER.log(Level.WARNING, "Prediction failed for " + origen + " -> " + destino + ": " + e.getMessage());
+                LOGGER.log(Level.WARNING, () -> "Prediction failed for " + origen + " -> " + destino + ": " + e.getMessage());
             }
         }
         return best;
@@ -300,7 +300,7 @@ public class MLRelationPredictor {
         synchronized (trainingLock) {
             int decisionCount = memoryService.getMemoria().size();
             if (decisionCount < minimumDecisionsThreshold) {
-                LOGGER.info("Not enough training data (" + decisionCount + 
+                LOGGER.info(() -> "Not enough training data (" + decisionCount + 
                     " decisions, need " + minimumDecisionsThreshold + ")");
                 return;
             }
@@ -314,7 +314,7 @@ public class MLRelationPredictor {
                     return;
                 }
                 
-                LOGGER.info("Training ML model with " + dataset.size() + " examples...");
+                LOGGER.info(() -> "Training ML model with " + dataset.size() + " examples...");
                 
                 LogisticRegressionModel candidate = modelFactory.get();
                 candidate.train(dataset, LEARNING_RATE, ITERATIONS);
@@ -323,7 +323,7 @@ public class MLRelationPredictor {
                 if (modelPath != null) {
                     try {
                         modelPersistence.saveModel(candidate, modelPath);
-                        LOGGER.info("Model trained and saved to " + modelPath);
+                        LOGGER.info(() -> "Model trained and saved to " + modelPath);
                     } catch (IOException e) {
                         LOGGER.log(Level.WARNING, "Model trained but failed to save: " + e.getMessage(), e);
                     }
@@ -342,7 +342,7 @@ public class MLRelationPredictor {
         LogisticRegressionModel loadedModel = modelPersistence.loadModel(modelPath);
         if (loadedModel != null && loadedModel.isTrained()) {
             this.model.set(loadedModel);
-            LOGGER.info("Loaded existing ML model from " + modelPath);
+            LOGGER.info(() -> "Loaded existing ML model from " + modelPath);
         }
     }
 
@@ -386,7 +386,7 @@ public class MLRelationPredictor {
             double[] features = featureExtractor.extractFeatures(origen, destino, tipo, origenInfo, destinoInfo);
             return current.predict(features);
         } catch (Exception e) {
-            LOGGER.log(Level.WARNING, "Prediction failed: " + e.getMessage());
+            LOGGER.log(Level.WARNING, () -> "Prediction failed: " + e.getMessage());
             return -1.0;
         }
     }
