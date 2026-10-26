@@ -135,50 +135,8 @@ public class IntelligentRelationAnalyzer {
             classInfoCache = classInfoParser.parseDirectory(dir, ignoredPaths, fileExtensions);
             LOGGER.fine(() -> "Parsed enhanced ClassInfo for " + classInfoCache.size() + " classes");
             
-            // Mark structural relations with their source
-            for (RelacionDetectada r : relacionesEstructurales) {
-                r.setSource(PredictionSource.STRUCTURAL);
-            }
-            relaciones.addAll(relacionesEstructurales);
-
-            LOGGER.info(() -> "Relaciones estructurales detectadas: " + relacionesEstructurales.size());
-
-            // 2️⃣ Inferir relaciones semánticas (por similitud de nombres)
             List<String> classNames = new ArrayList<>(relationDetector.getClassNames());
-            List<RelacionDetectada> relacionesSemanticas = inferirRelacionesSemanticas(classNames);
-            
-            // Mark semantic relations with their source
-            for (RelacionDetectada r : relacionesSemanticas) {
-                r.setSource(PredictionSource.SEMANTIC);
-            }
-            relaciones.addAll(relacionesSemanticas);
-
-            LOGGER.info(() -> "Relaciones semánticas inferidas: " + relacionesSemanticas.size());
-
-            // 3️⃣ ML Predictions (if available)
-            List<RelacionDetectada> relacionesML = obtenerPrediccionesML(classNames);
-            if (!relacionesML.isEmpty()) {
-                LOGGER.info(() -> "Relaciones ML predichas: " + relacionesML.size());
-            }
-
-            // 4️⃣ Combine scores using ScoreCombiner
-            relaciones = combinarPuntuaciones(relaciones, relacionesML);
-
-            // 5️⃣ Ajustar confianza según memoria previa
-            List<RelacionDetectada> ajustadas = ajustarPorMemoria(relaciones);
-
-            // 6️⃣ Eliminar duplicados y ordenar por confianza descendente
-            relaciones = new ArrayList<>(new LinkedHashSet<>(ajustadas));
-            relaciones.sort(Comparator.comparingDouble(RelacionDetectada::getConfianza).reversed());
-
-            // 7️⃣ Detectar relaciones bidireccionales
-            BidirectionalRelationDetector bidirectionalDetector = new BidirectionalRelationDetector();
-            relaciones = bidirectionalDetector.detectBidirectional(relaciones);
-            
-            long bidirCount = relaciones.stream().filter(RelacionDetectada::isBidirectional).count();
-            if (bidirCount > 0) {
-                LOGGER.info(() -> "Relaciones bidireccionales detectadas: " + bidirCount);
-            }
+            relaciones = analizarPipeline(relacionesEstructurales, classNames, classInfoCache);
 
             // 8️⃣ Escanear anotaciones existentes y marcar/filtrar
             List<RelacionDetectada> existingAnnotations = annotationScanner.scanExistingAnnotations(dir);
@@ -204,6 +162,76 @@ public class IntelligentRelationAnalyzer {
         return relaciones;
     }
 
+    /**
+     * Analiza un modelo ya construido en memoria (sin leer disco). No toca el estado de la UI
+     * ({@link #getLastInconsistencies()}, {@link #getClassInfoCache()}).
+     *
+     * @param clases nombre de clase → información de la clase; el orden del mapa se respeta
+     * @return relaciones detectadas, ordenadas por confianza descendente
+     */
+    public List<RelacionDetectada> analizar(Map<String, ClassInfo> clases) {
+        if (clases == null || clases.isEmpty()) {
+            return new ArrayList<>();
+        }
+        List<RelacionDetectada> estructurales = RelationDetector.detectRelations(clases);
+        return analizarPipeline(estructurales, new ArrayList<>(clases.keySet()), clases);
+    }
+
+    /**
+     * Pasos comunes a los dos puntos de entrada: semántico, ML, combinación, memoria,
+     * ordenación y detección bidireccional.
+     */
+    private List<RelacionDetectada> analizarPipeline(List<RelacionDetectada> relacionesEstructurales,
+                                                     List<String> classNames,
+                                                     Map<String, ClassInfo> classInfo) {
+        List<RelacionDetectada> relaciones = new ArrayList<>();
+
+        // 1️⃣ Mark structural relations with their source
+        for (RelacionDetectada r : relacionesEstructurales) {
+            r.setSource(PredictionSource.STRUCTURAL);
+        }
+        relaciones.addAll(relacionesEstructurales);
+
+        LOGGER.fine(() -> "Relaciones estructurales detectadas: " + relacionesEstructurales.size());
+
+        // 2️⃣ Inferir relaciones semánticas (por similitud de nombres)
+        List<RelacionDetectada> relacionesSemanticas = inferirRelacionesSemanticas(classNames);
+        
+        // Mark semantic relations with their source
+        for (RelacionDetectada r : relacionesSemanticas) {
+            r.setSource(PredictionSource.SEMANTIC);
+        }
+        relaciones.addAll(relacionesSemanticas);
+
+        LOGGER.fine(() -> "Relaciones semánticas inferidas: " + relacionesSemanticas.size());
+
+        // 3️⃣ ML Predictions (if available)
+        List<RelacionDetectada> relacionesML = obtenerPrediccionesML(classNames, classInfo);
+        if (!relacionesML.isEmpty()) {
+            LOGGER.fine(() -> "Relaciones ML predichas: " + relacionesML.size());
+        }
+
+        // 4️⃣ Combine scores using ScoreCombiner
+        relaciones = combinarPuntuaciones(relaciones, relacionesML);
+
+        // 5️⃣ Ajustar confianza según memoria previa
+        List<RelacionDetectada> ajustadas = ajustarPorMemoria(relaciones);
+
+        // 6️⃣ Eliminar duplicados y ordenar por confianza descendente
+        relaciones = new ArrayList<>(new LinkedHashSet<>(ajustadas));
+        relaciones.sort(Comparator.comparingDouble(RelacionDetectada::getConfianza).reversed());
+
+        // 7️⃣ Detectar relaciones bidireccionales
+        BidirectionalRelationDetector bidirectionalDetector = new BidirectionalRelationDetector();
+        relaciones = bidirectionalDetector.detectBidirectional(relaciones);
+        
+        long bidirCount = relaciones.stream().filter(RelacionDetectada::isBidirectional).count();
+        if (bidirCount > 0) {
+            LOGGER.fine(() -> "Relaciones bidireccionales detectadas: " + bidirCount);
+        }
+        return relaciones;
+    }
+
 
     /**
      * Obtiene predicciones ML si hay suficientes datos de entrenamiento.
@@ -213,7 +241,8 @@ public class IntelligentRelationAnalyzer {
      * Enhanced to pass full ClassInfo with field-level information for improved
      * feature extraction (Requirements 1.1-1.4).
      */
-    private List<RelacionDetectada> obtenerPrediccionesML(List<String> classNames) {
+    private List<RelacionDetectada> obtenerPrediccionesML(List<String> classNames,
+                                                          Map<String, ClassInfo> classInfoCache) {
         // Check if ML is available (requires minimum 5 decisions)
         if (mlPredictor == null || !mlPredictor.isMLAvailable()) {
             int decisionCount = mlPredictor != null ? mlPredictor.getDecisionCount() : 0;
@@ -375,7 +404,7 @@ public class IntelligentRelationAnalyzer {
      * Ajusta la confianza de las relaciones según lo aprendido en memoria.
      * Devuelve una nueva lista con las confianzas actualizadas.
      */
-    private List<RelacionDetectada> ajustarPorMemoria(List<RelacionDetectada> relaciones) {
+    List<RelacionDetectada> ajustarPorMemoria(List<RelacionDetectada> relaciones) {
         Map<String, String> memoria = memoryService.getMemoria();
         List<RelacionDetectada> resultado = new ArrayList<>();
 

@@ -28,6 +28,11 @@
 
         <!-- Argumentos extra de la JVM de los tests (el perfil valhalla añade enable-preview) -->
         <surefire.extraArgLine></surefire.extraArgLine>
+
+        <!-- Benchmarks (perfil bench) -->
+        <jmh.version>1.37</jmh.version>
+        <bench.jvmArgs></bench.jvmArgs>
+        <bench.args>-rf json -rff target/jmh-result.json</bench.args>
     </properties>
 
     <dependencies>
@@ -167,6 +172,85 @@
     </build>
 
     <profiles>
+        <!--
+            Benchmarks JMH (src/jmh/java). Se compilan como fuentes de test para reutilizar
+            el modelo sintético de src/test/java.
+              mvn -Pbench test-compile exec:exec
+              mvn -Pbench test-compile exec:exec -Dbench.args="FullAnalysis -p classes=50 -rf json -rff target/jmh.json"
+        -->
+        <profile>
+            <id>bench</id>
+            <properties>
+                <skipTests>true</skipTests>
+            </properties>
+            <dependencies>
+                <dependency>
+                    <groupId>org.openjdk.jmh</groupId>
+                    <artifactId>jmh-core</artifactId>
+                    <version>${jmh.version}</version>
+                    <scope>test</scope>
+                </dependency>
+                <dependency>
+                    <groupId>org.openjdk.jmh</groupId>
+                    <artifactId>jmh-generator-annprocess</artifactId>
+                    <version>${jmh.version}</version>
+                    <scope>test</scope>
+                </dependency>
+            </dependencies>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.codehaus.mojo</groupId>
+                        <artifactId>build-helper-maven-plugin</artifactId>
+                        <version>3.6.2</version>
+                        <executions>
+                            <execution>
+                                <id>add-jmh-sources</id>
+                                <phase>generate-test-sources</phase>
+                                <goals>
+                                    <goal>add-test-source</goal>
+                                </goals>
+                                <configuration>
+                                    <sources>
+                                        <source>src/jmh/java</source>
+                                    </sources>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-compiler-plugin</artifactId>
+                        <executions>
+                            <execution>
+                                <id>default-testCompile</id>
+                                <configuration>
+                                    <proc>full</proc>
+                                    <annotationProcessorPaths>
+                                        <path>
+                                            <groupId>org.openjdk.jmh</groupId>
+                                            <artifactId>jmh-generator-annprocess</artifactId>
+                                            <version>${jmh.version}</version>
+                                        </path>
+                                    </annotationProcessorPaths>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                    <plugin>
+                        <groupId>org.codehaus.mojo</groupId>
+                        <artifactId>exec-maven-plugin</artifactId>
+                        <version>3.6.4</version>
+                        <configuration>
+                            <executable>${java.home}/bin/java</executable>
+                            <classpathScope>test</classpathScope>
+                            <commandlineArgs>${bench.jvmArgs} -classpath %classpath org.openjdk.jmh.Main ${bench.args}</commandlineArgs>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+
         <!-- Profile for running performance tests -->
         <profile>
             <id>performance</id>

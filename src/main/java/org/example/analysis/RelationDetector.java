@@ -177,6 +177,64 @@ public class RelationDetector {
         return new ArrayList<>(new LinkedHashSet<>(relations));
     }
 
+    /**
+     * Detección estructural sobre un modelo ya parseado (sin disco ni estado).
+     * Aplica las mismas reglas que {@link #detectRelationsAsObjects()}: un campo cuyo tipo
+     * (sin {@code []}) es otra clase del modelo da ManyToOne; {@code List/Set/Collection<X>} da OneToMany.
+     *
+     * @param clases modelo: nombre de clase → información de la clase (el orden del mapa se respeta)
+     * @return relaciones estructurales sin duplicados
+     */
+    public static List<RelacionDetectada> detectRelations(Map<String, org.example.ml.ClassInfo> clases) {
+        List<RelacionDetectada> relations = new ArrayList<>();
+        RelationDetector rules = new RelationDetector();
+
+        for (Map.Entry<String, org.example.ml.ClassInfo> entry : clases.entrySet()) {
+            String className = entry.getKey();
+            for (String fieldType : elementTypes(entry.getValue())) {
+                if (clases.containsKey(fieldType)) {
+                    relations.add(new RelacionDetectada(className, fieldType, "ManyToOne", 0.95));
+                } else if (rules.isCollectionOfEntity(fieldType)) {
+                    String innerType = rules.extractGenericType(fieldType);
+                    if (clases.containsKey(innerType)) {
+                        relations.add(new RelacionDetectada(className, innerType, "OneToMany", 0.95));
+                    }
+                }
+            }
+        }
+        return new ArrayList<>(new LinkedHashSet<>(relations));
+    }
+
+    /**
+     * Tipos de campo como los devuelve {@code FieldDeclaration.getElementType()}: sin los {@code []}.
+     */
+    static List<String> elementTypes(org.example.ml.ClassInfo info) {
+        if (info == null) {
+            return List.of();
+        }
+        List<String> types = new ArrayList<>();
+        if (!info.getFields().isEmpty()) {
+            for (org.example.ml.FieldInfo field : info.getFields()) {
+                if (field.type() != null) {
+                    types.add(stripArrays(field.type()));
+                }
+            }
+        } else {
+            for (String type : info.getFieldTypes()) {
+                types.add(stripArrays(type));
+            }
+        }
+        return types;
+    }
+
+    private static String stripArrays(String type) {
+        String t = type.trim();
+        while (t.endsWith("[]")) {
+            t = t.substring(0, t.length() - 2).trim();
+        }
+        return t;
+    }
+
     /** Comprueba si el campo es una colección genérica */
     private boolean isCollectionOfEntity(String fieldType) {
         return fieldType.startsWith("List<") || fieldType.startsWith("Set<") || fieldType.startsWith("Collection<");
