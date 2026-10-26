@@ -45,6 +45,10 @@ test_model_sufficient_*.json
 logs/
 *.log
 
+### Datos locales que escribe la UI en el directorio de trabajo ###
+snapshots/
+ml_model.json
+
 ### Artefactos generados por los tests ###
 test_model_sufficient_*.json
 .jqwik-database

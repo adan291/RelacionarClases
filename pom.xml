@@ -31,6 +31,13 @@
         <!-- Argumentos extra de la JVM de los tests (el perfil valhalla añade enable-preview) -->
         <surefire.extraArgLine></surefire.extraArgLine>
 
+        <!--
+            Los pocos tipos que son value record con Valhalla (FieldInfo, RelationKey, PairScore,
+            ScoreInfo) tienen dos versiones: src/main/java25 (record) y src/main/java28 (value record).
+            El perfil valhalla cambia esta propiedad.
+        -->
+        <variant.sources>src/main/java25</variant.sources>
+
         <!-- Benchmarks (perfil bench) -->
         <jmh.version>1.37</jmh.version>
         <bench.jvmArgs></bench.jvmArgs>
@@ -150,6 +157,26 @@
 
     <build>
         <plugins>
+            <plugin>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>build-helper-maven-plugin</artifactId>
+                <version>3.6.2</version>
+                <executions>
+                    <execution>
+                        <id>add-variant-sources</id>
+                        <phase>generate-sources</phase>
+                        <goals>
+                            <goal>add-source</goal>
+                        </goals>
+                        <configuration>
+                            <sources>
+                                <source>${variant.sources}</source>
+                            </sources>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
@@ -324,6 +351,66 @@
                             <classpathScope>test</classpathScope>
                             <commandlineArgs>${bench.jvmArgs} -classpath %classpath org.openjdk.jmh.Main ${bench.args}</commandlineArgs>
                         </configuration>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+
+        <!--
+            Valhalla (JEP 401), solo con un JDK 28 EA:
+              $env:JAVA_HOME="$env:USERPROFILE\.jdks\jdk-28"; mvn -Pvalhalla verify
+            release 28 + enable-preview en compilador, tests, benchmarks y javafx:run.
+            El jar api resultante hay que lanzarlo con la opción enable-preview de java (ver README):
+            no existe atributo de manifiesto que la active.
+        -->
+        <profile>
+            <id>valhalla</id>
+            <properties>
+                <java.version>28</java.version>
+                <variant.sources>src/main/java28</variant.sources>
+                <surefire.extraArgLine>--enable-preview</surefire.extraArgLine>
+                <bench.jvmArgs>--enable-preview</bench.jvmArgs>
+            </properties>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-compiler-plugin</artifactId>
+                        <configuration>
+                            <compilerArgs>
+                                <arg>--enable-preview</arg>
+                            </compilerArgs>
+                        </configuration>
+                    </plugin>
+                    <plugin>
+                        <groupId>org.openjfx</groupId>
+                        <artifactId>javafx-maven-plugin</artifactId>
+                        <configuration>
+                            <options combine.children="append">
+                                <option>--enable-preview</option>
+                            </options>
+                        </configuration>
+                    </plugin>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-enforcer-plugin</artifactId>
+                        <version>3.6.3</version>
+                        <executions>
+                            <execution>
+                                <id>require-jdk-28</id>
+                                <goals>
+                                    <goal>enforce</goal>
+                                </goals>
+                                <configuration>
+                                    <rules>
+                                        <requireJavaVersion>
+                                            <version>[28,)</version>
+                                            <message>El perfil valhalla necesita JAVA_HOME apuntando a un JDK 28 EA con Valhalla</message>
+                                        </requireJavaVersion>
+                                    </rules>
+                                </configuration>
+                            </execution>
+                        </executions>
                     </plugin>
                 </plugins>
             </build>

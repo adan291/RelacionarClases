@@ -3,9 +3,10 @@ package org.example.analysis;
 import org.example.model.RelationKey;
 
 /**
- * Puntuaciones de una relación por fuente, inmutable. Cada fuente crea una copia nueva.
+ * Puntuaciones de una relación por fuente, inmutable.
+ * Versión Valhalla (value record, perfil {@code valhalla}).
  */
-record ScoreInfo(RelationKey key, double mlScore, double structuralScore, double semanticScore) {
+value record ScoreInfo(RelationKey key, double mlScore, double structuralScore, double semanticScore) {
 
     static ScoreInfo empty(RelationKey key) {
         return new ScoreInfo(key, 0.0, 0.0, 0.0);
