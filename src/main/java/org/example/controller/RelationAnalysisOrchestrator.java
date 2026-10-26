@@ -6,7 +6,6 @@ import java.util.List;
 import java.util.function.BiConsumer;
 import java.util.logging.Level;
 import java.util.logging.Logger;
-
 import org.example.model.RelacionDetectada;
 import org.example.service.DetectorRelacionesService;
 import org.example.service.MemoryService;
@@ -104,6 +103,13 @@ public class RelationAnalysisOrchestrator {
 
     public DetectorRelacionesService getDetectorService() {
         return detectorService;
+    }
+
+    /**
+     * @return el analizador que usa el orquestador (el mismo en todos los análisis)
+     */
+    public org.example.analysis.IntelligentRelationAnalyzer getAnalyzer() {
+        return detectorService.getAnalyzer();
     }
 
     public MemoryService getMemoryService() {

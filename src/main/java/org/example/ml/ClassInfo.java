@@ -54,6 +54,7 @@ public class ClassInfo {
      */
     public ClassInfo(String className, List<String> fieldTypes, 
                      boolean hasCollections, List<String> collectionTypes) {
+        this();
         this.className = className;
         this.fieldTypes = fieldTypes != null ? new ArrayList<>(fieldTypes) : new ArrayList<>();
         this.hasCollections = hasCollections;

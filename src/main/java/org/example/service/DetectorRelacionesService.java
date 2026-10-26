@@ -4,7 +4,6 @@ import java.util.Collections;
 import java.util.List;
 import java.util.logging.Level;
 import java.util.logging.Logger;
-
 import org.example.analysis.IntelligentRelationAnalyzer;
 import org.example.model.RelacionDetectada;
 
@@ -61,5 +60,13 @@ public class DetectorRelacionesService {
      */
     public MemoryService getMemoryService() {
         return memoryService;
+    }
+
+    /**
+     * Devuelve el analizador que usa este servicio. La UI lo necesita para leer las
+     * inconsistencias del último análisis y reentrenar el mismo predictor que se usa al analizar.
+     */
+    public IntelligentRelationAnalyzer getAnalyzer() {
+        return analyzer;
     }
 }

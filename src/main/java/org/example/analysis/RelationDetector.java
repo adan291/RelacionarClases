@@ -3,6 +3,7 @@ package org.example.analysis;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -11,11 +12,14 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import org.example.model.RelacionDetectada;
 
+import com.github.javaparser.ParseProblemException;
 import com.github.javaparser.StaticJavaParser;
 import com.github.javaparser.ast.CompilationUnit;
 import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
@@ -76,7 +80,12 @@ public class RelationDetector {
             ? fileExtensions 
             : List.of(".java");
 
-        List<File> javaFiles = Files.walk(sourceDir.toPath())
+        // Cada carga empieza de cero: reutilizar el detector no mezcla análisis sucesivos
+        classFields.clear();
+
+        List<File> javaFiles;
+        try (Stream<Path> paths = Files.walk(sourceDir.toPath())) {
+            javaFiles = paths
                 .filter(p -> {
                     String pathStr = p.toString().replace('\\', '/');
                     // Check if path should be ignored
@@ -100,21 +109,27 @@ public class RelationDetector {
                 })
                 .map(p -> p.toFile())
                 .collect(Collectors.toList());
+        }
 
         int total = javaFiles.size();
         int count = 0;
 
         for (File file : javaFiles) {
-            CompilationUnit cu = StaticJavaParser.parse(file);
+            try {
+                CompilationUnit cu = StaticJavaParser.parse(file);
 
-            cu.findAll(ClassOrInterfaceDeclaration.class).forEach(clazz -> {
-                List<String> fields = clazz.getFields().stream()
-                        .map(this::getFieldType)
-                        .filter(Objects::nonNull)
-                        .collect(Collectors.toList());
+                cu.findAll(ClassOrInterfaceDeclaration.class).forEach(clazz -> {
+                    List<String> fields = clazz.getFields().stream()
+                            .map(this::getFieldType)
+                            .filter(Objects::nonNull)
+                            .collect(Collectors.toList());
 
-                classFields.put(clazz.getNameAsString(), fields);
-            });
+                    classFields.put(clazz.getNameAsString(), fields);
+                });
+            } catch (ParseProblemException | IOException e) {
+                // Un fichero que no compila no debe tumbar el análisis del resto
+                LOGGER.log(Level.WARNING, () -> "No se pudo analizar " + file + ": " + e.getMessage());
+            }
 
             count++;
             if (listener != null) {

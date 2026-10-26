@@ -3,12 +3,14 @@ package org.example.ml;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import com.github.javaparser.StaticJavaParser;
 import com.github.javaparser.ast.CompilationUnit;
@@ -69,7 +71,9 @@ public class ClassInfoParser {
             ? fileExtensions
             : List.of(".java");
         
-        List<File> javaFiles = Files.walk(sourceDir.toPath())
+        List<File> javaFiles;
+        try (Stream<Path> paths = Files.walk(sourceDir.toPath())) {
+            javaFiles = paths
             .filter(p -> {
                 String pathStr = p.toString().replace('\\', '/');
                 // Check ignored paths
@@ -91,6 +95,7 @@ public class ClassInfoParser {
             })
             .map(p -> p.toFile())
             .collect(Collectors.toList());
+        }
         
         for (File file : javaFiles) {
             try {

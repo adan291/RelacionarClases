@@ -39,7 +39,7 @@ public class AnalysisController {
         progressBar.setProgress(0);
         progressLabel.setText("Analizando archivos...");
 
-        new Thread(() -> {
+        Thread worker = new Thread(() -> {
             try {
                 List<RelacionDetectada> relaciones = orchestrator.ejecutarAnalisis(path);
 
@@ -66,6 +66,8 @@ public class AnalysisController {
                     onError.run();
                 });
             }
-        }).start();
+        }, "analysis-controller");
+        worker.setDaemon(true);
+        worker.start();
     }
 }

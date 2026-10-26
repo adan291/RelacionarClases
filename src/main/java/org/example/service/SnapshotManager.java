@@ -5,6 +5,7 @@ import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.lang.reflect.Type;
+import java.nio.file.Path;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
@@ -12,6 +13,7 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import java.util.regex.Pattern;
 
 import org.example.config.ConfigManager;
 import org.example.model.AnalysisSnapshot;
@@ -36,6 +38,7 @@ public class SnapshotManager {
     private static final Logger LOGGER = Logger.getLogger(SnapshotManager.class.getName());
     private static final String JSON_EXTENSION = ".json";
     private static final DateTimeFormatter ID_DATE_FORMAT = DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss");
+    private static final Pattern SNAPSHOT_ID_PATTERN = Pattern.compile("^[A-Za-z0-9_-]{1,200}$");
     
     private final Gson gson;
     private final File snapshotsDirectory;
@@ -159,6 +162,10 @@ public class SnapshotManager {
         if (snapshotId == null || snapshotId.isEmpty()) {
             return null;
         }
+        if (!isValidSnapshotId(snapshotId)) {
+            LOGGER.warning(() -> "Rejected invalid snapshot ID: " + snapshotId);
+            return null;
+        }
         
         File snapshotFile = getSnapshotFile(snapshotId);
         
@@ -185,6 +192,10 @@ public class SnapshotManager {
      */
     public boolean deleteSnapshot(String snapshotId) {
         if (snapshotId == null || snapshotId.isEmpty()) {
+            return false;
+        }
+        if (!isValidSnapshotId(snapshotId)) {
+            LOGGER.warning(() -> "Rejected invalid snapshot ID: " + snapshotId);
             return false;
         }
         
@@ -271,7 +282,27 @@ public class SnapshotManager {
      * @return the file object
      */
     private File getSnapshotFile(String snapshotId) {
-        return new File(snapshotsDirectory, snapshotId + JSON_EXTENSION);
+        if (!isValidSnapshotId(snapshotId)) {
+            throw new IllegalArgumentException("Invalid snapshot ID: " + snapshotId);
+        }
+        File file = new File(snapshotsDirectory, snapshotId + JSON_EXTENSION);
+        Path dir = snapshotsDirectory.toPath().toAbsolutePath().normalize();
+        Path resolved = file.toPath().toAbsolutePath().normalize();
+        if (!dir.equals(resolved.getParent())) {
+            throw new IllegalArgumentException("Snapshot ID escapes the snapshots directory: " + snapshotId);
+        }
+        return file;
+    }
+
+    /**
+     * Un ID válido solo tiene letras ASCII, dígitos, '_' y '-' (como los que genera
+     * {@link #generateSnapshotId(String)} o un UUID). Así no puede contener separadores ni "..".
+     *
+     * @param snapshotId the ID to check
+     * @return true if the ID can be used as a file name inside the snapshots directory
+     */
+    public static boolean isValidSnapshotId(String snapshotId) {
+        return snapshotId != null && SNAPSHOT_ID_PATTERN.matcher(snapshotId).matches();
     }
 
     /**

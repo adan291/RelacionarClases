@@ -4,10 +4,13 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Supplier;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
 import org.example.config.ConfigManager;
+import org.example.config.PersistenceConfig;
 import org.example.model.RelacionDetectada;
 import org.example.service.MemoryService;
 
@@ -15,13 +18,19 @@ import org.example.service.MemoryService;
  * Orchestrates ML-based relation prediction by integrating with the existing system.
  * Uses MemoryService for training data, FeatureExtractor for feature generation,
  * and LogisticRegressionModel for predictions.
- * 
+ *
+ * <p>Concurrencia: el modelo activo se publica en un {@link AtomicReference}. Reentrenar crea
+ * un modelo nuevo, lo entrena aparte y lo sustituye de una vez, así que las predicciones en curso
+ * siguen usando el modelo anterior completo. Los entrenamientos se serializan entre sí.</p>
+ *
  * Implements Requirements 4.1: Combine ML predictions with structural and semantic analysis.
  */
 public class MLRelationPredictor {
 
     private static final Logger LOGGER = Logger.getLogger(MLRelationPredictor.class.getName());
     private static final String DEFAULT_MODEL_PATH = "ml_model.json";
+    private static final double LEARNING_RATE = 0.1;
+    private static final int ITERATIONS = 1000;
     
     private final int minimumDecisionsThreshold;
     
@@ -29,8 +38,12 @@ public class MLRelationPredictor {
     private final FeatureExtractor featureExtractor;
     private final TrainingDataGenerator trainingDataGenerator;
     private final ModelPersistence modelPersistence;
-    private LogisticRegressionModel model;
+    private final AtomicReference<LogisticRegressionModel> model;
+    /** Fábrica de modelos nuevos para cada reentrenamiento (conserva la semilla del modelo inicial). */
+    private final Supplier<LogisticRegressionModel> modelFactory;
+    /** Ruta del modelo en disco; {@code null} significa que no se persiste. */
     private final String modelPath;
+    private final Object trainingLock = new Object();
 
     /**
      * Creates a new MLRelationPredictor with the specified dependencies.
@@ -58,24 +71,53 @@ public class MLRelationPredictor {
     
     /**
      * Creates a new MLRelationPredictor with full dependency injection including threshold.
+     * Un {@code modelPath} nulo usa la ruta por defecto ({@value #DEFAULT_MODEL_PATH}).
      */
     public MLRelationPredictor(MemoryService memoryService, FeatureExtractor featureExtractor,
                                LogisticRegressionModel model, String modelPath, int minDecisions) {
+        this(memoryService, featureExtractor, model,
+             modelPath != null ? modelPath : DEFAULT_MODEL_PATH, minDecisions, true);
+    }
+
+    private MLRelationPredictor(MemoryService memoryService, FeatureExtractor featureExtractor,
+                                LogisticRegressionModel model, String modelPath, int minDecisions,
+                                boolean loadExisting) {
         this.memoryService = memoryService;
         this.featureExtractor = featureExtractor != null ? featureExtractor : new FeatureExtractor();
-        this.model = model != null ? model : new LogisticRegressionModel();
-        this.modelPath = modelPath != null ? modelPath : DEFAULT_MODEL_PATH;
+        LogisticRegressionModel initial = model != null ? model : new LogisticRegressionModel();
+        this.model = new AtomicReference<>(initial);
+        this.modelFactory = seededFactory(initial);
+        this.modelPath = modelPath;
         this.minimumDecisionsThreshold = minDecisions;
-        this.trainingDataGenerator = new TrainingDataGenerator(this.featureExtractor);
-        this.modelPersistence = new ModelPersistence();
+        this.trainingDataGenerator = new TrainingDataGenerator(
+            this.featureExtractor, PersistenceConfig.DEFAULT.trainingDataPath());
+        this.modelPersistence = new ModelPersistence(modelPath != null ? modelPath : DEFAULT_MODEL_PATH);
         
-        // Try to load existing model
-        loadModelIfExists();
+        if (loadExisting && modelPath != null) {
+            loadModelIfExists();
+        }
+    }
+
+    /**
+     * Crea un predictor que no lee ni escribe el modelo en disco (tests, benchmarks).
+     */
+    public static MLRelationPredictor inMemory(MemoryService memoryService, FeatureExtractor featureExtractor,
+                                               LogisticRegressionModel model, int minDecisions) {
+        return new MLRelationPredictor(memoryService, featureExtractor, model, null, minDecisions, false);
+    }
+
+    /**
+     * Si el modelo inicial no está entrenado, los reentrenamientos usan una semilla derivada de él
+     * para que dos ejecuciones con el mismo modelo inicial den los mismos pesos.
+     */
+    private static Supplier<LogisticRegressionModel> seededFactory(LogisticRegressionModel initial) {
+        return initial::newUntrainedCopy;
     }
 
 
     /**
      * Predicts relations using the ML model.
+     * Si hay datos suficientes y todavía no hay modelo entrenado, lo entrena una vez.
      * 
      * @param classNames list of class names to analyze
      * @param classInfo structural information about each class (keyed by class name)
@@ -91,16 +133,13 @@ public class MLRelationPredictor {
         
         // Ensure model is available
         if (!isMLAvailable()) {
-            LOGGER.info("ML not available (insufficient training data). Using heuristics.");
+            LOGGER.fine("ML not available (insufficient training data). Using heuristics.");
             return predictions;
         }
         
-        // Ensure model is trained
-        if (!model.isTrained()) {
-            retrain();
-            if (!model.isTrained()) {
-                return predictions;
-            }
+        LogisticRegressionModel current = ensureTrained();
+        if (current == null) {
+            return predictions;
         }
         
         // Generate predictions for all class pairs
@@ -146,7 +185,7 @@ public class MLRelationPredictor {
                         origen, destino, tipo, origenInfo, destinoInfo, fieldName, fieldType);
                     
                     try {
-                        double confidence = model.predict(features);
+                        double confidence = current.predict(features);
                         if (confidence > bestConfidence) {
                             bestConfidence = confidence;
                             bestPrediction = new RelacionDetectada(origen, destino, tipo, confidence);
@@ -168,35 +207,52 @@ public class MLRelationPredictor {
     }
 
     /**
-     * Checks if ML prediction is available.
-     * Returns false if memory has fewer than 5 decisions.
-     * Triggers model training if needed.
+     * Indica si hay decisiones suficientes en memoria para usar ML.
+     * No entrena ni escribe nada: para eso están {@link #ensureTrained()} y {@link #retrain()}.
      * 
-     * @return true if ML can be used for predictions
+     * @return true si la memoria tiene al menos el mínimo de decisiones configurado
      */
     public boolean isMLAvailable() {
         if (memoryService == null) {
             return false;
         }
-        
-        int decisionCount = memoryService.getMemoria().size();
-        
-        if (decisionCount < minimumDecisionsThreshold) {
-            return false;
+        return memoryService.getMemoria().size() >= minimumDecisionsThreshold;
+    }
+
+    /**
+     * @return true si hay datos suficientes y además ya hay un modelo entrenado listo para predecir
+     */
+    public boolean isModelReady() {
+        return isMLAvailable() && model.get().isTrained();
+    }
+
+    /**
+     * Devuelve el modelo entrenado; si no lo hay y hay datos suficientes, lo entrena ahora.
+     *
+     * @return el modelo entrenado, o {@code null} si no se puede entrenar
+     */
+    public LogisticRegressionModel ensureTrained() {
+        LogisticRegressionModel current = model.get();
+        if (current.isTrained()) {
+            return current;
         }
-        
-        // If we have enough data but model isn't trained, try to train it
-        if (!model.isTrained()) {
-            retrain();
+        if (!isMLAvailable()) {
+            return null;
         }
-        
-        return model.isTrained();
+        synchronized (trainingLock) {
+            current = model.get();
+            if (!current.isTrained()) {
+                retrain();
+                current = model.get();
+            }
+        }
+        return current.isTrained() ? current : null;
     }
 
     /**
      * Returns the minimum number of decisions required for ML to be available.
      * 
-     * @return the minimum threshold (5)
+     * @return the minimum threshold
      */
     public int getMinimumDecisionsThreshold() {
         return minimumDecisionsThreshold;
@@ -214,7 +270,7 @@ public class MLRelationPredictor {
 
     /**
      * Forces re-training of the model from current memory data.
-     * Generates training data from memory, trains the model, and persists it.
+     * Entrena un modelo nuevo y, si sale bien, lo publica y lo persiste (si hay ruta).
      * 
      * Implements Requirements 3.2: Persist model weights to local file for reuse.
      */
@@ -224,37 +280,41 @@ public class MLRelationPredictor {
             return;
         }
         
-        int decisionCount = memoryService.getMemoria().size();
-        if (decisionCount < minimumDecisionsThreshold) {
-            LOGGER.info("Not enough training data (" + decisionCount + 
-                " decisions, need " + minimumDecisionsThreshold + ")");
-            return;
-        }
-        
-        try {
-            // Generate training data from memory
-            TrainingDataset dataset = trainingDataGenerator.generateFromMemory(memoryService);
-            
-            if (dataset == null || dataset.size() == 0) {
-                LOGGER.severe("Failed to generate training data");
+        synchronized (trainingLock) {
+            int decisionCount = memoryService.getMemoria().size();
+            if (decisionCount < minimumDecisionsThreshold) {
+                LOGGER.info("Not enough training data (" + decisionCount + 
+                    " decisions, need " + minimumDecisionsThreshold + ")");
                 return;
             }
             
-            LOGGER.info("Training ML model with " + dataset.size() + " examples...");
-            
-            // Train the model
-            model.train(dataset, 0.1, 1000);
-            
-            // Persist the trained model
             try {
-                modelPersistence.saveModel(model, modelPath);
-                LOGGER.info("Model trained and saved to " + modelPath);
-            } catch (IOException e) {
-                LOGGER.log(Level.WARNING, "Model trained but failed to save: " + e.getMessage(), e);
+                // Generate training data from memory
+                TrainingDataset dataset = trainingDataGenerator.generateFromMemory(memoryService);
+                
+                if (dataset == null || dataset.size() == 0) {
+                    LOGGER.severe("Failed to generate training data");
+                    return;
+                }
+                
+                LOGGER.info("Training ML model with " + dataset.size() + " examples...");
+                
+                LogisticRegressionModel candidate = modelFactory.get();
+                candidate.train(dataset, LEARNING_RATE, ITERATIONS);
+                model.set(candidate);
+                
+                if (modelPath != null) {
+                    try {
+                        modelPersistence.saveModel(candidate, modelPath);
+                        LOGGER.info("Model trained and saved to " + modelPath);
+                    } catch (IOException e) {
+                        LOGGER.log(Level.WARNING, "Model trained but failed to save: " + e.getMessage(), e);
+                    }
+                }
+                
+            } catch (Exception e) {
+                LOGGER.log(Level.SEVERE, "Training failed: " + e.getMessage(), e);
             }
-            
-        } catch (Exception e) {
-            LOGGER.log(Level.SEVERE, "Training failed: " + e.getMessage(), e);
         }
     }
 
@@ -264,18 +324,25 @@ public class MLRelationPredictor {
     private void loadModelIfExists() {
         LogisticRegressionModel loadedModel = modelPersistence.loadModel(modelPath);
         if (loadedModel != null && loadedModel.isTrained()) {
-            this.model = loadedModel;
+            this.model.set(loadedModel);
             LOGGER.info("Loaded existing ML model from " + modelPath);
         }
     }
 
     /**
-     * Gets the underlying model (for testing purposes).
+     * Gets the current model (for testing purposes).
      * 
-     * @return the logistic regression model
+     * @return the logistic regression model currently published
      */
     public LogisticRegressionModel getModel() {
-        return model;
+        return model.get();
+    }
+
+    /**
+     * @return ruta del modelo en disco, o {@code null} si el predictor no persiste
+     */
+    public String getModelPath() {
+        return modelPath;
     }
 
     /**
@@ -290,13 +357,17 @@ public class MLRelationPredictor {
      */
     public double predictConfidence(String origen, String destino, String tipo,
                                     ClassInfo origenInfo, ClassInfo destinoInfo) {
-        if (!isMLAvailable() || !model.isTrained()) {
+        if (!isMLAvailable()) {
+            return -1.0;
+        }
+        LogisticRegressionModel current = ensureTrained();
+        if (current == null) {
             return -1.0;
         }
         
         try {
             double[] features = featureExtractor.extractFeatures(origen, destino, tipo, origenInfo, destinoInfo);
-            return model.predict(features);
+            return current.predict(features);
         } catch (Exception e) {
             LOGGER.log(Level.WARNING, "Prediction failed: " + e.getMessage());
             return -1.0;

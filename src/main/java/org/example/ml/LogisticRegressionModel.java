@@ -5,7 +5,6 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Random;
 import java.util.logging.Logger;
-
 import org.example.config.ConfigManager;
 import org.example.config.MLConfig;
 
@@ -64,18 +63,22 @@ public class LogisticRegressionModel {
         "relationType_OneToMany"
     };
 
-    private double[] weights;
-    private double bias;
-    private boolean trained;
+    /**
+     * Estado inmutable del modelo. Se publica entero a través de un campo volatile:
+     * {@link #predict(double[])} lee una sola vez la referencia y nunca ve pesos a medio
+     * entrenar, y {@link #train} trabaja sobre copias locales que solo se publican al final.
+     */
+    private record State(double[] weights, double bias, boolean trained) {
+        static final State EMPTY = new State(null, 0.0, false);
+    }
+
+    private volatile State state = State.EMPTY;
     private final Random random;
 
     /**
      * Creates a new untrained LogisticRegressionModel.
      */
     public LogisticRegressionModel() {
-        this.weights = null;
-        this.bias = 0.0;
-        this.trained = false;
         this.random = new Random();
     }
 
@@ -85,10 +88,22 @@ public class LogisticRegressionModel {
      * @param seed random seed for weight initialization
      */
     public LogisticRegressionModel(long seed) {
-        this.weights = null;
-        this.bias = 0.0;
-        this.trained = false;
         this.random = new Random(seed);
+    }
+
+    private LogisticRegressionModel(Random sharedRandom) {
+        this.random = sharedRandom;
+    }
+
+    /**
+     * Crea un modelo sin entrenar que comparte el generador aleatorio con este.
+     * Se usa para reentrenar sobre una copia y publicarla después: el primer reentrenamiento
+     * consume la misma secuencia aleatoria que si se hubiera entrenado este modelo en el sitio.
+     *
+     * @return un modelo nuevo, sin entrenar
+     */
+    public LogisticRegressionModel newUntrainedCopy() {
+        return new LogisticRegressionModel(random);
     }
     
     /**
@@ -100,12 +115,8 @@ public class LogisticRegressionModel {
      */
     public LogisticRegressionModel(int featureCount, long seed) {
         this.random = new Random(seed);
-        this.trained = false;
         if (featureCount > 0) {
-            initializeWeights(featureCount);
-        } else {
-            this.weights = null;
-            this.bias = 0.0;
+            this.state = initialState(featureCount);
         }
     }
     
@@ -116,12 +127,8 @@ public class LogisticRegressionModel {
      */
     public LogisticRegressionModel(boolean initializeWithDefaults) {
         this.random = new Random();
-        this.trained = false;
         if (initializeWithDefaults) {
-            initializeWeights(DEFAULT_FEATURE_COUNT);
-        } else {
-            this.weights = null;
-            this.bias = 0.0;
+            this.state = initialState(DEFAULT_FEATURE_COUNT);
         }
     }
 
@@ -153,18 +160,20 @@ public class LogisticRegressionModel {
      * @throws IllegalStateException if model is not trained
      */
     public double predict(double[] features) {
-        if (!trained || weights == null) {
+        State s = state; // una sola lectura: pesos y bias coherentes entre sí
+        if (!s.trained() || s.weights() == null) {
             throw new IllegalStateException("Model must be trained before making predictions");
         }
         if (features == null) {
             return clampOutput(0.5);
         }
+        double[] weights = s.weights();
         
         // Handle feature vector size mismatch with padding
-        double[] adjustedFeatures = adjustFeatureVector(features);
+        double[] adjustedFeatures = adjustFeatureVector(features, weights.length);
 
         // Calculate weighted sum: w1*x1 + w2*x2 + ... + wn*xn + bias
-        double weightedSum = bias;
+        double weightedSum = s.bias();
         for (int i = 0; i < adjustedFeatures.length; i++) {
             weightedSum += weights[i] * adjustedFeatures[i];
         }
@@ -187,19 +196,19 @@ public class LogisticRegressionModel {
      * @param features original feature vector
      * @return adjusted feature vector matching weights length
      */
-    private double[] adjustFeatureVector(double[] features) {
-        if (features.length == weights.length) {
+    private static double[] adjustFeatureVector(double[] features, int weightCount) {
+        if (features.length == weightCount) {
             return features;
         }
         
-        double[] adjusted = new double[weights.length];
+        double[] adjusted = new double[weightCount];
         
         // Copy existing features
-        int copyLength = Math.min(features.length, weights.length);
+        int copyLength = Math.min(features.length, weightCount);
         System.arraycopy(features, 0, adjusted, 0, copyLength);
         
         // Pad remaining with neutral value
-        for (int i = copyLength; i < weights.length; i++) {
+        for (int i = copyLength; i < weightCount; i++) {
             adjusted[i] = NEUTRAL_PADDING_VALUE;
         }
         
@@ -240,8 +249,11 @@ public class LogisticRegressionModel {
         int featureCount = examples.get(0).getFeatures().length;
         int n = examples.size();
 
-        // Initialize weights randomly in range [-0.5, 0.5]
-        initializeWeights(featureCount);
+        // Initialize weights randomly in range [-0.5, 0.5].
+        // Se entrena sobre copias locales; el estado publicado no cambia hasta el final.
+        State init = initialState(featureCount);
+        double[] weights = init.weights();
+        double bias = init.bias();
 
         // Gradient descent optimization
         for (int iter = 0; iter < iterations; iter++) {
@@ -277,7 +289,7 @@ public class LogisticRegressionModel {
             bias -= learningRate * (gradientBias / n);
         }
 
-        this.trained = true;
+        this.state = new State(weights, bias, true);
         
         // Log feature importance after training (Requirement 7.3)
         logFeatureImportance();
@@ -301,10 +313,16 @@ public class LogisticRegressionModel {
      * Implements Requirement 7.3: Log feature importance after training.
      */
     public void logFeatureImportance() {
-        if (!trained || weights == null) {
+        State s = state;
+        if (!s.trained() || s.weights() == null) {
             LOGGER.warning("Cannot log feature importance: model not trained");
             return;
         }
+        if (!LOGGER.isLoggable(java.util.logging.Level.INFO)) {
+            return;
+        }
+        double[] weights = s.weights();
+        double bias = s.bias();
         
         // Create list of feature importance entries
         List<FeatureImportance> importanceList = new ArrayList<>();
@@ -351,9 +369,11 @@ public class LogisticRegressionModel {
      * @return list of FeatureImportance sorted by absolute weight (descending), or empty list if not trained
      */
     public List<FeatureImportance> getFeatureImportance() {
-        if (!trained || weights == null) {
+        State s = state;
+        if (!s.trained() || s.weights() == null) {
             return List.of();
         }
+        double[] weights = s.weights();
         
         List<FeatureImportance> importanceList = new ArrayList<>();
         for (int i = 0; i < weights.length; i++) {
@@ -382,22 +402,26 @@ public class LogisticRegressionModel {
     }
 
     /**
-     * Initializes weights randomly in range [-0.5, 0.5].
-     * 
+     * Creates an initial (untrained) state with random weights in range [-0.5, 0.5].
+     * El orden de llamadas a {@code random} es el mismo que en la versión anterior
+     * (primero los pesos, luego el bias), así que los modelos con semilla dan los mismos resultados.
+     *
      * @param featureCount number of features/weights
      */
-    private void initializeWeights(int featureCount) {
-        weights = new double[featureCount];
+    private State initialState(int featureCount) {
+        double[] weights = new double[featureCount];
         for (int i = 0; i < featureCount; i++) {
             weights[i] = random.nextDouble() - 0.5;
         }
-        bias = random.nextDouble() - 0.5;
+        double bias = random.nextDouble() - 0.5;
+        return new State(weights, bias, false);
     }
 
     /**
      * @return the trained model weights, or null if not trained
      */
     public double[] getWeights() {
+        double[] weights = state.weights();
         return weights != null ? weights.clone() : null;
     }
 
@@ -411,29 +435,28 @@ public class LogisticRegressionModel {
         if (weights == null) {
             throw new IllegalArgumentException("Weights cannot be null");
         }
-        this.weights = weights.clone();
-        this.bias = bias;
-        this.trained = true;
+        this.state = new State(weights.clone(), bias, true);
     }
 
     /**
      * @return the model bias
      */
     public double getBias() {
-        return bias;
+        return state.bias();
     }
 
     /**
      * @return true if the model has been trained
      */
     public boolean isTrained() {
-        return trained;
+        return state.trained();
     }
 
     /**
      * @return the number of features this model expects, or 0 if not trained
      */
     public int getFeatureCount() {
+        double[] weights = state.weights();
         return weights != null ? weights.length : 0;
     }
     
@@ -443,7 +466,7 @@ public class LogisticRegressionModel {
      * @return true if the model has LEGACY_FEATURE_COUNT weights
      */
     public boolean isLegacyModel() {
-        return weights != null && weights.length == LEGACY_FEATURE_COUNT;
+        return getFeatureCount() == LEGACY_FEATURE_COUNT;
     }
     
     /**
@@ -452,7 +475,7 @@ public class LogisticRegressionModel {
      * @return true if the model has DEFAULT_FEATURE_COUNT weights
      */
     public boolean isEnhancedModel() {
-        return weights != null && weights.length == DEFAULT_FEATURE_COUNT;
+        return getFeatureCount() == DEFAULT_FEATURE_COUNT;
     }
     
     /**
@@ -461,13 +484,16 @@ public class LogisticRegressionModel {
      * 
      * @param newFeatureCount the new number of features
      */
-    public void resizeWeights(int newFeatureCount) {
+    public synchronized void resizeWeights(int newFeatureCount) {
         if (newFeatureCount <= 0) {
             throw new IllegalArgumentException("Feature count must be positive");
         }
+        State s = state;
+        double[] weights = s.weights();
         
         if (weights == null) {
-            initializeWeights(newFeatureCount);
+            State init = initialState(newFeatureCount);
+            this.state = new State(init.weights(), init.bias(), s.trained());
             return;
         }
         
@@ -484,6 +510,6 @@ public class LogisticRegressionModel {
             newWeights[i] = random.nextDouble() - 0.5;
         }
         
-        this.weights = newWeights;
+        this.state = new State(newWeights, s.bias(), s.trained());
     }
 }

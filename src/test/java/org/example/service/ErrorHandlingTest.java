@@ -50,28 +50,37 @@ class ErrorHandlingTest {
     // ==================== 6.2 Corrupted Memory File Tests ====================
 
     /**
-     * Test handling of corrupted JSON memory file.
-     * Verifies that the system throws an exception for malformed JSON.
+     * Un JSON corrupto no impide arrancar: se guarda una copia .corrupt y se empieza vacío.
      * 
      * Requirements: 6.1
      */
     @Test
-    void corruptedMemoryFile_throwsJsonSyntaxException() throws IOException {
+    void corruptedMemoryFile_recoversWithEmptyMemoryAndCorruptCopy() throws IOException {
         // Arrange - create a corrupted JSON file (invalid JSON syntax)
         File memoryFile = tempDir.resolve("corrupted-memory.json").toFile();
+        String corrupted = "{ invalid json without closing brace";
         try (FileWriter writer = new FileWriter(memoryFile)) {
-            writer.write("{ invalid json without closing brace");
+            writer.write(corrupted);
         }
 
-        // Act & Assert - current implementation throws JsonSyntaxException
-        assertThrows(com.google.gson.JsonSyntaxException.class, () -> {
-            new MemoryService(memoryFile.getAbsolutePath());
-        });
+        // Act
+        MemoryService service = assertDoesNotThrow(() -> new MemoryService(memoryFile.getAbsolutePath()));
+
+        // Assert
+        assertTrue(service.getMemoria().isEmpty(), "Corrupted memory should start empty");
+        Path backup = Path.of(memoryFile.getAbsolutePath() + ".corrupt");
+        assertTrue(Files.exists(backup), "A .corrupt copy should be kept");
+        assertEquals(corrupted, Files.readString(backup), "The copy should keep the original content");
+
+        // Se puede seguir trabajando y el fichero vuelve a ser JSON válido
+        service.recordarDecision("A -> B : ManyToOne", true);
+        MemoryService reloaded = new MemoryService(memoryFile.getAbsolutePath());
+        assertEquals("aceptada", reloaded.getMemoria().get("A -> B : ManyToOne"));
     }
 
     /**
      * Test handling of memory file with invalid JSON structure.
-     * Verifies behavior when JSON is syntactically valid but has wrong structure.
+     * JSON válido pero con otra estructura (array): mismo tratamiento que un fichero corrupto.
      * 
      * Requirements: 6.1
      */
@@ -83,10 +92,28 @@ class ErrorHandlingTest {
             writer.write("[\"item1\", \"item2\"]");
         }
 
-        // Act & Assert - should throw exception for wrong structure
-        assertThrows(com.google.gson.JsonSyntaxException.class, () -> {
-            new MemoryService(memoryFile.getAbsolutePath());
-        });
+        MemoryService service = assertDoesNotThrow(() -> new MemoryService(memoryFile.getAbsolutePath()));
+
+        assertTrue(service.getMemoria().isEmpty());
+        assertTrue(Files.exists(Path.of(memoryFile.getAbsolutePath() + ".corrupt")));
+    }
+
+    /**
+     * La escritura de la memoria es atómica: no quedan temporales y el fichero siempre es JSON válido.
+     */
+    @Test
+    void memoryWrite_isAtomicAndLeavesNoTempFiles() throws IOException {
+        Path memoryFile = tempDir.resolve("atomic-memory.json");
+        MemoryService service = new MemoryService(memoryFile.toString());
+        for (int i = 0; i < 20; i++) {
+            service.recordarDecision("A" + i + " -> B : OneToMany", i % 2 == 0);
+        }
+
+        try (var files = Files.list(tempDir)) {
+            assertEquals(List.of("atomic-memory.json"),
+                files.map(p -> p.getFileName().toString()).sorted().toList());
+        }
+        assertEquals(20, new MemoryService(memoryFile.toString()).getMemoria().size());
     }
 
     /**

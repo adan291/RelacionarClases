@@ -5,12 +5,12 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.logging.Level;
 import java.util.logging.Logger;
-
 import org.example.config.AnalysisConfig;
 import org.example.config.ConfigManager;
 import org.example.ml.ClassInfo;
@@ -115,6 +115,9 @@ public class IntelligentRelationAnalyzer {
      */
     public List<RelacionDetectada> analizar(String sourcePath) {
         List<RelacionDetectada> relaciones = new ArrayList<>();
+        // El estado de la UI se reinicia en cada análisis para no arrastrar datos del anterior
+        lastInconsistencies = new ArrayList<>();
+        classInfoCache = new HashMap<>();
 
         try {
             File dir = new File(sourcePath);
@@ -275,8 +278,10 @@ public class IntelligentRelationAnalyzer {
      */
     private List<RelacionDetectada> combinarPuntuaciones(List<RelacionDetectada> relacionesBase,
                                                           List<RelacionDetectada> relacionesML) {
-        // Create a map to track scores by relation key
-        Map<String, ScoreInfo> scoreMap = new HashMap<>();
+        // Create a map to track scores by relation key.
+        // LinkedHashMap: el orden de salida (y por tanto los empates al ordenar y la detección
+        // bidireccional, que se queda con la última relación de cada par) no depende del hash.
+        Map<String, ScoreInfo> scoreMap = new LinkedHashMap<>();
         
         // Process base relations (structural and semantic)
         for (RelacionDetectada r : relacionesBase) {

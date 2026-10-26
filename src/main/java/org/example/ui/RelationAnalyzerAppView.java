@@ -7,6 +7,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.logging.Logger;
 import java.util.stream.Collectors;
 
@@ -109,7 +110,11 @@ public class RelationAnalyzerAppView {
     private final Label confidenceLabel;
 
     private File carpetaSeleccionada;
-    private IntelligentRelationAnalyzer analyzer;
+    /** El mismo analizador que usa el orquestador: inconsistencias y reentrenos sobre el mismo predictor. */
+    private final IntelligentRelationAnalyzer analyzer;
+    /** Evita lanzar dos análisis (o clonados) a la vez. */
+    private final AtomicBoolean backgroundTaskRunning = new AtomicBoolean(false);
+    private final AtomicBoolean retrainRunning = new AtomicBoolean(false);
     
     // Unsaved changes tracking
     private boolean hasUnsavedChanges = false;
@@ -124,6 +129,7 @@ public class RelationAnalyzerAppView {
         this.stage = stage;
         this.orchestrator = new RelationAnalysisOrchestrator();
         this.memoryService = orchestrator.getMemoryService();
+        this.analyzer = orchestrator.getAnalyzer();
         
         // Load configuration - Requirements: 4.2, 3.1
         this.uiConfig = ConfigManager.getInstance().getUIConfig();
@@ -745,12 +751,16 @@ public class RelationAnalyzerAppView {
         // Re-entrenar si hay suficientes datos
         if (analyzer != null && analyzer.getMLPredictor() != null) {
             int count = memoryService.getMemoria().size();
-            if (count >= 5 && count % 3 == 0) {
+            if (count >= 5 && count % 3 == 0 && retrainRunning.compareAndSet(false, true)) {
                 log("🧠 Re-entrenando modelo ML...");
-                new Thread(() -> {
-                    analyzer.getMLPredictor().retrain();
-                    Platform.runLater(() -> log("✅ Modelo ML actualizado"));
-                }).start();
+                startDaemon("ml-retrain", () -> {
+                    try {
+                        analyzer.getMLPredictor().retrain();
+                        Platform.runLater(() -> log("✅ Modelo ML actualizado"));
+                    } finally {
+                        retrainRunning.set(false);
+                    }
+                });
             }
         }
     }
@@ -831,31 +841,50 @@ public class RelationAnalyzerAppView {
 
         dialog.showAndWait().ifPresent(url -> {
             if (url.isBlank()) return;
+            if (gitService.validateRepoUrl(url).isEmpty()) {
+                log("❌ URL no permitida: usa https:// de github.com, gitlab.com o bitbucket.org");
+                return;
+            }
+            if (!backgroundTaskRunning.compareAndSet(false, true)) {
+                log("⏳ Ya hay una tarea en curso. Espera a que termine.");
+                return;
+            }
             
             log("🌍 Clonando repositorio: " + url);
             progressBar.setProgress(-1); // Indeterminate
             
-            new Thread(() -> {
-                File repoDir = gitService.cloneRepository(url, msg -> Platform.runLater(() -> log(msg)));
-                
-                Platform.runLater(() -> {
-                    progressBar.setProgress(0);
+            startDaemon("git-clone", () -> {
+                try {
+                    File repoDir = gitService.cloneRepository(url, msg -> Platform.runLater(() -> log(msg)));
+                    // Recorrer el disco aquí, fuera del hilo de JavaFX
+                    File srcDir = repoDir != null ? gitService.findMainSourceFolder(repoDir) : null;
+                    int javaFiles = srcDir != null ? gitService.countJavaFiles(srcDir) : 0;
                     
-                    if (repoDir != null) {
-                        File srcDir = gitService.findMainSourceFolder(repoDir);
+                    Platform.runLater(() -> {
+                        progressBar.setProgress(0);
+                        if (repoDir == null) {
+                            return;
+                        }
                         if (srcDir != null) {
                             carpetaSeleccionada = srcDir;
-                            int javaFiles = gitService.countJavaFiles(srcDir);
                             folderLabel.setText("🌍 " + srcDir.getAbsolutePath());
                             log("✅ Encontrados " + javaFiles + " archivos Java en: " + srcDir.getName());
                             log("💡 Pulsa 'Analizar' para detectar relaciones");
                         } else {
                             log("⚠️ No se encontraron archivos Java en el repositorio");
                         }
-                    }
-                });
-            }).start();
+                    });
+                } finally {
+                    backgroundTaskRunning.set(false);
+                }
+            });
         });
+    }
+
+    private static void startDaemon(String name, Runnable task) {
+        Thread thread = new Thread(task, name);
+        thread.setDaemon(true);
+        thread.start();
     }
 
     private void ejecutarAnalisis() {
@@ -864,14 +893,19 @@ public class RelationAnalyzerAppView {
             return;
         }
 
+        if (!backgroundTaskRunning.compareAndSet(false, true)) {
+            log("⏳ Ya hay una tarea en curso. Espera a que termine.");
+            return;
+        }
+
         log("🚀 Analizando: " + carpetaSeleccionada.getName());
         progressBar.setProgress(0);
+        final String rutaAnalisis = carpetaSeleccionada.getAbsolutePath();
 
-        new Thread(() -> {
+        startDaemon("relation-analysis", () -> {
             try {
-                analyzer = new IntelligentRelationAnalyzer(memoryService);
-                List<RelacionDetectada> relaciones = orchestrator.ejecutarAnalisis(
-                    carpetaSeleccionada.getAbsolutePath());
+                List<RelacionDetectada> relaciones = orchestrator.ejecutarAnalisis(rutaAnalisis);
+                var inconsistencies = analyzer.getLastInconsistencies();
 
                 Platform.runLater(() -> {
                     progressBar.setProgress(1.0);
@@ -890,19 +924,18 @@ public class RelationAnalyzerAppView {
                     }
                     
                     // Mostrar inconsistencias si las hay
-                    if (analyzer != null) {
-                        var inconsistencies = analyzer.getLastInconsistencies();
-                        if (inconsistencies != null && !inconsistencies.isEmpty()) {
-                            log("⚠️ " + inconsistencies.size() + " inconsistencias encontradas:");
-                            inconsistencies.forEach(i -> log("   " + i.toString()));
-                        }
+                    if (inconsistencies != null && !inconsistencies.isEmpty()) {
+                        log("⚠️ " + inconsistencies.size() + " inconsistencias encontradas:");
+                        inconsistencies.forEach(i -> log("   " + i.toString()));
                     }
                 });
 
             } catch (RuntimeException ex) {
                 Platform.runLater(() -> log("❌ Error: " + ex.getMessage()));
+            } finally {
+                backgroundTaskRunning.set(false);
             }
-        }).start();
+        });
     }
 
     /**

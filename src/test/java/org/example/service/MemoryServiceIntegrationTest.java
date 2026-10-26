@@ -65,23 +65,24 @@ class MemoryServiceIntegrationTest {
 
     /**
      * Test handling of corrupted JSON file.
-     * The current implementation throws JsonSyntaxException for malformed JSON.
-     * This test verifies the actual behavior.
+     * Un JSON corrupto ya no tumba el arranque: memoria vacía y copia en .corrupt.
      * 
      * Requirements: 6.1
      */
     @Test
-    void loadCorruptedFile_throwsException() throws IOException {
+    void loadCorruptedFile_recoversWithEmptyMemory() throws IOException {
         // Arrange - create a corrupted JSON file
         File memoryFile = tempDir.resolve("corrupted-memory.json").toFile();
         try (FileWriter writer = new FileWriter(memoryFile)) {
             writer.write("{ invalid json content without closing brace");
         }
         
-        // Act & Assert - current implementation throws exception for corrupted JSON
-        assertThrows(com.google.gson.JsonSyntaxException.class, () -> {
-            new MemoryService(memoryFile.getAbsolutePath());
-        });
+        // Act
+        MemoryService service = new MemoryService(memoryFile.getAbsolutePath());
+
+        // Assert
+        assertTrue(service.getMemoria().isEmpty());
+        assertTrue(new File(memoryFile.getAbsolutePath() + ".corrupt").exists());
     }
     
     /**

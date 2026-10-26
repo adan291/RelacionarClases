@@ -107,9 +107,25 @@ public class ModelPersistence {
         state.bias = model.getBias();
         state.trainedAt = Instant.now().toString();
 
-        try (Writer writer = new OutputStreamWriter(
-                new FileOutputStream(path), StandardCharsets.UTF_8)) {
-            GSON.toJson(state, writer);
+        // Escritura atómica: temporal en el mismo directorio y renombrado encima del destino,
+        // para que un lector concurrente nunca vea un fichero a medias.
+        java.nio.file.Path target = java.nio.file.Path.of(path).toAbsolutePath();
+        java.nio.file.Path dir = target.getParent();
+        java.nio.file.Files.createDirectories(dir);
+        java.nio.file.Path tmp = java.nio.file.Files.createTempFile(dir, target.getFileName().toString(), ".tmp");
+        try {
+            try (Writer writer = new OutputStreamWriter(
+                    new FileOutputStream(tmp.toFile()), StandardCharsets.UTF_8)) {
+                GSON.toJson(state, writer);
+            }
+            try {
+                java.nio.file.Files.move(tmp, target, java.nio.file.StandardCopyOption.ATOMIC_MOVE,
+                    java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+            } catch (java.nio.file.AtomicMoveNotSupportedException e) {
+                java.nio.file.Files.move(tmp, target, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+            }
+        } finally {
+            java.nio.file.Files.deleteIfExists(tmp);
         }
     }
 
