@@ -100,7 +100,7 @@
 ## 🌐 Fábrica de backends
 
 ### M-1.1 ✅ API REST
-- ✅ `org.example.api.RelationsApiServer` (Javalin) en `127.0.0.1:8090`, contrato 3.2 de `docs/FABRICA.md`
+- ✅ `org.example.api.RelationsApiServer` (Javalin) en `127.0.0.1:8095`, contrato 3.2 de `docs/FABRICA.md`
 - ✅ `POST /relations/suggest`, `POST /relations/feedback` (reentreno en segundo plano), `GET /health`
 - ✅ Jar ejecutable `-api.jar`; arranque y variables en el README
 

@@ -175,7 +175,7 @@ La IA mejora cuanto más la uses: más relaciones = más precisión.
 
 ## API REST de relaciones
 
-Expone el análisis como servicio HTTP según el contrato 3.2 de `docs/FABRICA.md` del workspace (`http://127.0.0.1:8090/api/v1`). No necesita JavaFX.
+Expone el análisis como servicio HTTP según el contrato 3.2 de `docs/FABRICA.md` del workspace (`http://127.0.0.1:8095/api/v1`). No necesita JavaFX.
 
 Arranque:
 
@@ -188,7 +188,7 @@ También se puede lanzar la clase `org.example.api.RelationsApiServer` desde el 
 
 | Variable | Por defecto | Uso |
 |---|---|---|
-| `RELATIONS_PORT` | `8090` | Puerto. Siempre escucha en `127.0.0.1` |
+| `RELATIONS_PORT` | `8095` | Puerto. Siempre escucha en `127.0.0.1` |
 | `RELATIONS_ALLOWED_ORIGINS` | `http://localhost:3000,http://127.0.0.1:3000` | Orígenes CORS, separados por comas |
 | `RELATIONS_DATA_DIR` | `~/.relacionar-clases` | Carpeta de `memoria_relaciones.json` y `ml_model.json` (nunca el directorio de trabajo) |
 | `RELATIONS_MIN_DECISIONS` | `10` | Decisiones necesarias para activar ML |

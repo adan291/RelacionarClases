@@ -13,7 +13,7 @@ import org.example.config.MLConfig;
  * Configuración de la API, leída de variables de entorno.
  *
  * <ul>
- *   <li>{@code RELATIONS_PORT}: puerto (8090).</li>
+ *   <li>{@code RELATIONS_PORT}: puerto (8095).</li>
  *   <li>{@code RELATIONS_ALLOWED_ORIGINS}: orígenes CORS separados por comas
  *       ({@code http://localhost:3000,http://127.0.0.1:3000}).</li>
  *   <li>{@code RELATIONS_DATA_DIR}: directorio de la memoria y del modelo
@@ -27,7 +27,7 @@ public record ApiConfig(String host, int port, Set<String> allowedOrigins, Path 
                         int minDecisions, Duration retrainDebounce) {
 
     public static final String HOST = "127.0.0.1";
-    public static final int DEFAULT_PORT = 8090;
+    public static final int DEFAULT_PORT = 8095;
     public static final Set<String> DEFAULT_ORIGINS = Set.of("http://localhost:3000", "http://127.0.0.1:3000");
 
     public static final long MAX_BODY_BYTES = 1024L * 1024L;

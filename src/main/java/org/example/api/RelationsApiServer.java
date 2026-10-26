@@ -20,7 +20,7 @@ import io.javalin.Javalin;
  *
  * <pre>
  *   java -jar target/detection-relations-1.0-SNAPSHOT-api.jar
- *   RELATIONS_PORT=8090 RELATIONS_DATA_DIR=D:\datos\relaciones java -jar ...-api.jar
+ *   RELATIONS_PORT=8095 RELATIONS_DATA_DIR=D:\datos\relaciones java -jar ...-api.jar
  * </pre>
  *
  * Todas las dependencias se crean aquí y se pasan por constructor: el camino del análisis no

@@ -372,7 +372,7 @@ class RelationsApiTest {
     @Test
     void configFromEnvUsesDefaultsAndDataDir() {
         ApiConfig defaults = ApiConfig.fromEnv(Map.of());
-        assertEquals(8090, defaults.port());
+        assertEquals(8095, defaults.port());
         assertEquals("127.0.0.1", defaults.host());
         assertEquals(ApiConfig.DEFAULT_ORIGINS, defaults.allowedOrigins());
         assertFalse(defaults.dataDir().equals(Path.of("").toAbsolutePath()), "Nunca el directorio de trabajo");
