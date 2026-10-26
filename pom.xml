@@ -1,0 +1,169 @@
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <groupId>com.ejemplo</groupId>
+    <artifactId>detection-relations</artifactId>
+    <version>1.0-SNAPSHOT</version>
+
+    <properties>
+        <java.version>21</java.version>
+        <javafx.version>21.0.3</javafx.version>
+    </properties>
+
+    <dependencies>
+        <!-- ✅ JavaFX -->
+        <dependency>
+            <groupId>org.openjfx</groupId>
+            <artifactId>javafx-controls</artifactId>
+            <version>${javafx.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.openjfx</groupId>
+            <artifactId>javafx-fxml</artifactId>
+            <version>${javafx.version}</version>
+        </dependency>
+
+        <!-- ✅ JavaParser para analizar código Java -->
+        <dependency>
+            <groupId>com.github.javaparser</groupId>
+            <artifactId>javaparser-core</artifactId>
+            <version>3.26.1</version>
+        </dependency>
+
+        <!-- ✅ GraphStream para diagramas -->
+        <dependency>
+            <groupId>org.graphstream</groupId>
+            <artifactId>gs-core</artifactId>
+            <version>2.0</version>
+        </dependency>
+        <dependency>
+            <groupId>org.graphstream</groupId>
+            <artifactId>gs-ui-javafx</artifactId>
+            <version>2.0</version>
+        </dependency>
+
+        <!-- ✅ Gson para exportar y leer datos -->
+        <dependency>
+            <groupId>com.google.code.gson</groupId>
+            <artifactId>gson</artifactId>
+            <version>2.10.1</version>
+        </dependency>
+
+        <!-- ✅ Sustituto de simmetrics: Apache Commons Text -->
+        <dependency>
+            <groupId>org.apache.commons</groupId>
+            <artifactId>commons-text</artifactId>
+            <version>1.14.0</version>
+        </dependency>
+
+        <!-- ✅ JUnit 5 for unit testing -->
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <version>5.10.2</version>
+            <scope>test</scope>
+        </dependency>
+
+        <!-- ✅ jqwik for property-based testing -->
+        <dependency>
+            <groupId>net.jqwik</groupId>
+            <artifactId>jqwik</artifactId>
+            <version>1.8.2</version>
+            <scope>test</scope>
+        </dependency>
+
+        <!-- ✅ Mockito for mocking in tests -->
+        <dependency>
+            <groupId>org.mockito</groupId>
+            <artifactId>mockito-core</artifactId>
+            <version>5.11.0</version>
+            <scope>test</scope>
+        </dependency>
+
+        <!-- ✅ TestFX for JavaFX UI testing -->
+        <dependency>
+            <groupId>org.testfx</groupId>
+            <artifactId>testfx-junit5</artifactId>
+            <version>4.0.18</version>
+            <scope>test</scope>
+        </dependency>
+
+        <!-- ✅ Monocle for headless JavaFX testing -->
+        <dependency>
+            <groupId>org.testfx</groupId>
+            <artifactId>openjfx-monocle</artifactId>
+            <version>jdk-12.0.1+2</version>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <!-- ✅ Compilar con Java 21 -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <version>3.11.0</version>
+                <configuration>
+                    <release>${java.version}</release>
+                </configuration>
+            </plugin>
+
+            <!-- ✅ Ejecutar JavaFX -->
+            <plugin>
+                <groupId>org.openjfx</groupId>
+                <artifactId>javafx-maven-plugin</artifactId>
+                <version>0.0.8</version>
+                <configuration>
+                    <mainClass>org.example.App</mainClass>
+                </configuration>
+            </plugin>
+
+            <!-- ✅ Maven Surefire Plugin for JUnit 5 and jqwik -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <version>3.2.5</version>
+                <configuration>
+                    <includes>
+                        <include>**/*Test.java</include>
+                        <include>**/*Tests.java</include>
+                        <include>**/*Properties.java</include>
+                    </includes>
+                    <!-- Test tag configuration: use -Dgroups=integration,e2e to run specific tags -->
+                    <!-- By default, exclude UI and performance tests -->
+                    <excludedGroups>ui,performance</excludedGroups>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+
+    <profiles>
+        <!-- Profile for running performance tests -->
+        <profile>
+            <id>performance</id>
+            <properties>
+                <surefire.excludedGroups>none</surefire.excludedGroups>
+            </properties>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-surefire-plugin</artifactId>
+                        <version>3.2.5</version>
+                        <configuration>
+                            <includes>
+                                <include>**/*Test.java</include>
+                            </includes>
+                            <groups>performance</groups>
+                            <excludedGroups combine.self="override"></excludedGroups>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+    </profiles>
+
+</project>

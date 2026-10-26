@@ -1,0 +1,108 @@
+/* =======================================================
+   🎨 STYLE.CSS — Intelligent Relation Analyzer
+   ======================================================= */
+
+/* ---------- BASE ---------- */
+.root {
+    -fx-font-family: "Segoe UI", "Roboto", "Sans-serif";
+    -fx-background-color: -fx-base-color;
+    -fx-text-fill: -fx-text-color;
+    -fx-transition: all 0.3s ease;
+}
+
+.label {
+    -fx-font-size: 14px;
+    -fx-text-fill: -fx-text-color;
+}
+
+/* ---------- BOTONES ---------- */
+.button {
+    -fx-font-weight: bold;
+    -fx-background-radius: 8;
+    -fx-padding: 8 16;
+    -fx-text-fill: white;
+    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.2), 3, 0.3, 0, 1);
+    -fx-cursor: hand;
+    -fx-transition: all 0.3s ease;
+}
+
+.button:hover {
+    -fx-opacity: 0.9;
+}
+
+/* ---------- TABLA ---------- */
+.table-view {
+    -fx-border-radius: 6;
+    -fx-background-radius: 6;
+    -fx-border-color: transparent;
+    -fx-font-size: 13px;
+}
+
+.table-view .column-header-background {
+    -fx-background-color: derive(-fx-base-color, -10%);
+}
+
+.table-row-cell {
+    -fx-background-color: transparent;
+    -fx-text-fill: -fx-text-color;
+}
+.table-row-cell:selected {
+    -fx-background-color: #3498db;
+    -fx-text-fill: white;
+}
+
+/* ---------- TEXT AREA ---------- */
+.text-area {
+    -fx-background-color: derive(-fx-base-color, 10%);
+    -fx-text-fill: -fx-text-color;
+    -fx-font-family: Consolas;
+}
+
+/* ---------- PROGRESS ---------- */
+.progress-bar {
+    -fx-accent: #00E676;
+}
+
+/* ---------- SWITCH ---------- */
+.theme-switch {
+    -fx-background-color: linear-gradient(to bottom, #ccc, #aaa);
+    -fx-background-radius: 15;
+    -fx-padding: 2;
+    -fx-cursor: hand;
+    -fx-min-width: 50;
+    -fx-max-width: 50;
+    -fx-min-height: 25;
+    -fx-max-height: 25;
+    -fx-alignment: center-left;
+    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.2), 4, 0.3, 0, 1);
+    -fx-transition: all 0.3s ease;
+}
+
+.theme-switch.dark {
+    -fx-background-color: linear-gradient(to bottom, #333, #555);
+}
+
+.theme-switch .circle {
+    -fx-radius: 10;
+    -fx-fill: #FFD700; /* sol */
+    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.3), 4, 0.3, 0, 1);
+    -fx-translate-x: 2;
+    -fx-transition: all 0.3s ease;
+}
+
+.theme-switch.dark .circle {
+    -fx-fill: #00BFFF; /* luna */
+    -fx-translate-x: 25;
+}
+
+/* ---------- MODO CLARO ---------- */
+.light {
+    -fx-base-color: linear-gradient(to bottom right, #F8F9FA, #EDEDED);
+    -fx-text-color: #222;
+}
+
+/* ---------- MODO OSCURO ---------- */
+.dark {
+    -fx-base-color: linear-gradient(to bottom right, #1E1E2F, #2A2A40);
+    -fx-text-color: #E8E8E8;
+}

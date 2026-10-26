@@ -1,0 +1,13 @@
+{
+  "name": "Lint Java on Save",
+  "version": "1.0.0",
+  "description": "Ejecuta checkstyle y sugiere correcciones cuando se guarda un archivo Java",
+  "when": {
+    "type": "fileEdited",
+    "patterns": ["*.java"]
+  },
+  "then": {
+    "type": "askAgent",
+    "prompt": "Revisa el archivo Java editado. Verifica que sigue las convenciones del proyecto definidas en steering/project-conventions.md. Si hay problemas de estilo o naming, sugiere correcciones."
+  }
+}

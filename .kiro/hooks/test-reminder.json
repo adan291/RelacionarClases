@@ -1,0 +1,13 @@
+{
+  "name": "Test Reminder",
+  "version": "1.0.0",
+  "description": "Recuerda crear o actualizar tests cuando se crea una nueva clase",
+  "when": {
+    "type": "fileCreated",
+    "patterns": ["src/main/java/**/*.java"]
+  },
+  "then": {
+    "type": "askAgent",
+    "prompt": "Se ha creado un nuevo archivo Java. Verifica si necesita tests unitarios o property-based tests. Si es una clase de lógica (Service, Generator, etc.), sugiere qué tests deberían crearse siguiendo las convenciones de testing del proyecto."
+  }
+}

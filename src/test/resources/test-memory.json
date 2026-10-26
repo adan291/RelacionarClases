@@ -1,0 +1,81 @@
+{
+  "decisions": {
+    "User -> Order : OneToMany": true,
+    "Order -> User : ManyToOne": true,
+    "Order -> OrderItem : OneToMany": true,
+    "OrderItem -> Order : ManyToOne": true,
+    "OrderItem -> Product : ManyToOne": true,
+    "Product -> Category : ManyToMany": true,
+    "Category -> Product : ManyToMany": true,
+    "Category -> Category : ManyToOne": false,
+    "Customer -> Invoice : OneToMany": true,
+    "Invoice -> Customer : ManyToOne": true
+  },
+  "snapshots": [
+    {
+      "id": "test-snapshot-001",
+      "metadata": {
+        "id": "test-snapshot-001",
+        "timestamp": "2025-01-15T10:30:00",
+        "projectPath": "/test/sample-project",
+        "projectName": "sample-project",
+        "description": "Initial test snapshot",
+        "totalRelations": 5,
+        "acceptedCount": 4,
+        "rejectedCount": 1,
+        "pendingCount": 0,
+        "typeBreakdown": {
+          "OneToMany": 2,
+          "ManyToOne": 2,
+          "ManyToMany": 1
+        }
+      },
+      "relations": [
+        {
+          "origen": "User",
+          "destino": "Order",
+          "tipo": "OneToMany",
+          "confianza": 0.95,
+          "decisionState": "ACCEPTED"
+        },
+        {
+          "origen": "Order",
+          "destino": "User",
+          "tipo": "ManyToOne",
+          "confianza": 0.95,
+          "decisionState": "ACCEPTED"
+        },
+        {
+          "origen": "Order",
+          "destino": "OrderItem",
+          "tipo": "OneToMany",
+          "confianza": 0.90,
+          "decisionState": "ACCEPTED"
+        },
+        {
+          "origen": "OrderItem",
+          "destino": "Order",
+          "tipo": "ManyToOne",
+          "confianza": 0.90,
+          "decisionState": "ACCEPTED"
+        },
+        {
+          "origen": "Category",
+          "destino": "Category",
+          "tipo": "ManyToOne",
+          "confianza": 0.60,
+          "decisionState": "REJECTED"
+        }
+      ],
+      "decisions": {
+        "User -> Order : OneToMany": true,
+        "Order -> User : ManyToOne": true,
+        "Order -> OrderItem : OneToMany": true,
+        "OrderItem -> Order : ManyToOne": true,
+        "Category -> Category : ManyToOne": false
+      }
+    }
+  ],
+  "lastAnalyzedPath": "/test/sample-project",
+  "version": "1.0"
+}

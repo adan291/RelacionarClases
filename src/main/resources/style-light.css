@@ -1,0 +1,63 @@
+/* =======================================================
+   🌞 STYLE-LIGHT.CSS — Tema claro para Intelligent Analyzer
+   ======================================================= */
+.root {
+    -fx-font-family: "Segoe UI", "Roboto", "Sans-serif";
+    -fx-background-color: linear-gradient(to bottom right, #ffffff, #f4f4f4);
+}
+
+/* ---------- Textos ---------- */
+.label, .table-view, .text-area, .list-view {
+    -fx-text-fill: #2c3e50;
+}
+
+/* ---------- Botones ---------- */
+.button {
+    -fx-background-color: #3498db;
+    -fx-text-fill: white;
+    -fx-background-radius: 8;
+    -fx-font-weight: bold;
+    -fx-cursor: hand;
+    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.2), 3, 0.3, 0, 1);
+    -fx-padding: 8 16;
+}
+.button:hover {
+    -fx-background-color: #2980b9;
+}
+.button:pressed {
+    -fx-background-color: #1f618d;
+}
+
+/* ---------- Tabla ---------- */
+.table-view {
+    -fx-background-color: white;
+    -fx-border-color: #dcdcdc;
+    -fx-border-radius: 8;
+}
+.table-view .column-header-background {
+    -fx-background-color: #f2f2f2;
+}
+.table-row-cell {
+    -fx-text-fill: #2c3e50;
+}
+.table-row-cell:selected {
+    -fx-background-color: #3498db;
+    -fx-text-fill: white;
+}
+
+/* ---------- Área de log ---------- */
+.text-area {
+    -fx-control-inner-background: white;
+    -fx-text-fill: #2c3e50;
+    -fx-font-family: 'Consolas';
+    -fx-border-color: #dcdcdc;
+}
+
+/* ---------- Scrollbars ---------- */
+.scroll-bar .thumb {
+    -fx-background-color: rgba(100,100,100,0.4);
+    -fx-background-radius: 4;
+}
+.scroll-bar .thumb:hover {
+    -fx-background-color: rgba(80,80,80,0.6);
+}
