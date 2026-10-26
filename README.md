@@ -153,6 +153,34 @@ Si algo “aprendido” no te convence, pulsa 🗑️ Borrar memoria para empeza
 La IA mejora cuanto más la uses: más relaciones = más precisión.
 
 
+## API REST de relaciones
+
+Expone el análisis como servicio HTTP según el contrato 3.2 de `docs/FABRICA.md` del workspace (`http://127.0.0.1:8090/api/v1`). No necesita JavaFX.
+
+Arranque:
+
+```powershell
+mvn -B package -DskipTests
+java -jar target\detection-relations-1.0-SNAPSHOT-api.jar
+```
+
+También se puede lanzar la clase `org.example.api.RelationsApiServer` desde el IDE.
+
+| Variable | Por defecto | Uso |
+|---|---|---|
+| `RELATIONS_PORT` | `8090` | Puerto. Siempre escucha en `127.0.0.1` |
+| `RELATIONS_ALLOWED_ORIGINS` | `http://localhost:3000,http://127.0.0.1:3000` | Orígenes CORS, separados por comas |
+| `RELATIONS_DATA_DIR` | `~/.relacionar-clases` | Carpeta de `memoria_relaciones.json` y `ml_model.json` (nunca el directorio de trabajo) |
+| `RELATIONS_MIN_DECISIONS` | `10` | Decisiones necesarias para activar ML |
+| `RELATIONS_RETRAIN_DEBOUNCE_MS` | `2000` | Espera tras el último feedback antes de reentrenar |
+
+Rutas:
+- `GET /health` → `{"status":"ok","mlAvailable":false}`.
+- `POST /relations/suggest` con `entities` y `options`. Las `relations` que llegan se convierten en campos para el análisis y no se devuelven como sugerencia (tampoco otro tipo para el mismo par en el mismo sentido). Además del análisis de clases se aplican dos reglas: clave ajena por nombre (`customerId: Long` → `ManyToOne Customer`) y lado inverso de cada relación existente (si `User` tiene `OneToMany Post`, se sugiere `Post ManyToOne User`, con el nombre sacado de un campo `xxxId` sin entidad, como `authorId` → `author`). Con `useMemory`, una decisión aceptada exacta aparece con `origin: MEMORY` y una rechazada exacta no se sugiere.
+- `POST /relations/feedback` con un objeto o una lista `{source, target, type, decision: accepted|rejected}` → `202`. Guarda en la memoria y reentrena en segundo plano con debounce.
+
+Límites: 500 entidades, 200 campos (y 200 relaciones) por entidad y 1 MB de cuerpo; si se superan, `413`. Los errores de validación son `400`, un `Content-Type` que no sea JSON es `415`, y todos siguen RFC 7807 (`application/problem+json` con `type`, `title`, `status`, `detail`).
+
 ## 📝 Sistema de Logging
 
 La aplicación utiliza un sistema de logging estructurado basado en `java.util.logging`.

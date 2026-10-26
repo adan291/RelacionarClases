@@ -5,8 +5,6 @@ import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.regex.Pattern;
-
 import org.example.model.RelationKey;
 
 /**
@@ -17,8 +15,6 @@ import org.example.model.RelationKey;
  * conservan el orden de la memoria, así que la suma de ajustes se hace en el mismo orden que antes.</p>
  */
 final class MemoryIndex {
-
-    private static final Pattern KEY_SEPARATOR = Pattern.compile(" -> | : ");
 
     /** Entradas en el orden de la memoria. */
     private final List<Entry> entries = new ArrayList<>();
@@ -49,19 +45,8 @@ final class MemoryIndex {
         return index;
     }
 
-    /**
-     * Mismo criterio que el parser anterior: separa por {@code " -> "} o {@code " : "} y
-     * necesita al menos tres partes.
-     */
     static RelationKey parse(String texto) {
-        if (texto == null) {
-            return null;
-        }
-        String[] partes = KEY_SEPARATOR.split(texto);
-        if (partes.length < 3) {
-            return null;
-        }
-        return new RelationKey(partes[0].trim(), partes[1].trim(), partes[2].trim());
+        return MemoryKeys.parse(texto);
     }
 
     Entry entry(int i) {

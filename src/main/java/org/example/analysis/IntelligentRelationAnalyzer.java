@@ -147,7 +147,7 @@ public class IntelligentRelationAnalyzer {
             classInfoCache = soloClases;
             LOGGER.fine(() -> "Parsed enhanced ClassInfo for " + soloClases.size() + " classes");
 
-            relaciones = analizarPipeline(relacionesEstructurales, classNames, mlInfo);
+            relaciones = analizarPipeline(relacionesEstructurales, classNames, mlInfo, AnalysisOptions.DEFAULT);
 
             // 8️⃣ Anotaciones existentes (derivadas del mismo parseo) y marcar/filtrar
             List<RelacionDetectada> existingAnnotations = annotationScanner.scanExistingAnnotations(proyecto);
@@ -181,11 +181,24 @@ public class IntelligentRelationAnalyzer {
      * @return relaciones detectadas, ordenadas por confianza descendente
      */
     public List<RelacionDetectada> analizar(Map<String, ClassInfo> clases) {
+        return analizar(clases, AnalysisOptions.DEFAULT);
+    }
+
+    /**
+     * Análisis en memoria sin estado entre llamadas: todo lo que necesita vive en variables
+     * locales, así que se puede llamar desde varios hilos a la vez (lo usa la API REST).
+     *
+     * @param clases nombre de clase → información de la clase; el orden del mapa se respeta
+     * @param opciones qué fuentes usar además del análisis estructural y semántico
+     * @return relaciones detectadas, ordenadas por confianza descendente
+     */
+    public List<RelacionDetectada> analizar(Map<String, ClassInfo> clases, AnalysisOptions opciones) {
         if (clases == null || clases.isEmpty()) {
             return new ArrayList<>();
         }
+        AnalysisOptions opts = opciones != null ? opciones : AnalysisOptions.DEFAULT;
         List<RelacionDetectada> estructurales = RelationDetector.detectRelations(clases);
-        return analizarPipeline(estructurales, new ArrayList<>(clases.keySet()), clases);
+        return analizarPipeline(estructurales, new ArrayList<>(clases.keySet()), clases, opts);
     }
 
     /**
@@ -194,7 +207,8 @@ public class IntelligentRelationAnalyzer {
      */
     private List<RelacionDetectada> analizarPipeline(List<RelacionDetectada> relacionesEstructurales,
                                                      List<String> classNames,
-                                                     Map<String, ClassInfo> classInfo) {
+                                                     Map<String, ClassInfo> classInfo,
+                                                     AnalysisOptions opciones) {
         List<RelacionDetectada> relaciones = new ArrayList<>();
 
         // 1️⃣ Mark structural relations with their source
@@ -220,7 +234,9 @@ public class IntelligentRelationAnalyzer {
         LOGGER.fine(() -> "Relaciones semánticas inferidas: " + relacionesSemanticas.size());
 
         // 3️⃣ ML Predictions (if available)
-        List<RelacionDetectada> relacionesML = obtenerPrediccionesML(classNames, classInfo);
+        List<RelacionDetectada> relacionesML = opciones.useMl()
+            ? obtenerPrediccionesML(classNames, classInfo)
+            : new ArrayList<>();
         if (!relacionesML.isEmpty()) {
             LOGGER.fine(() -> "Relaciones ML predichas: " + relacionesML.size());
         }
@@ -229,7 +245,9 @@ public class IntelligentRelationAnalyzer {
         relaciones = combinarPuntuaciones(relaciones, relacionesML);
 
         // 5️⃣ Ajustar confianza según memoria previa
-        List<RelacionDetectada> ajustadas = ajustarPorMemoria(relaciones, sims);
+        List<RelacionDetectada> ajustadas = opciones.useMemory() && memoryService != null
+            ? ajustarPorMemoria(relaciones, sims)
+            : relaciones;
 
         // 6️⃣ Eliminar duplicados y ordenar por confianza descendente
         relaciones = new ArrayList<>(new LinkedHashSet<>(ajustadas));

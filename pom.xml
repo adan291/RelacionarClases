@@ -18,6 +18,8 @@
         <gson.version>2.15.0</gson.version>
         <commons-text.version>1.14.0</commons-text.version>
         <graphstream.version>2.0</graphstream.version>
+        <javalin.version>7.2.4</javalin.version>
+        <slf4j.version>2.0.17</slf4j.version>
 
         <junit.version>5.13.4</junit.version>
         <jqwik.version>1.9.3</jqwik.version>
@@ -81,7 +83,26 @@
             <version>${commons-text.version}</version>
         </dependency>
 
+        <!-- API REST (org.example.api) -->
+        <dependency>
+            <groupId>io.javalin</groupId>
+            <artifactId>javalin</artifactId>
+            <version>${javalin.version}</version>
+        </dependency>
+        <!-- Javalin/Jetty registran con SLF4J; se envía a java.util.logging como el resto del proyecto -->
+        <dependency>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-jdk14</artifactId>
+            <version>${slf4j.version}</version>
+        </dependency>
+
         <!-- Tests -->
+        <dependency>
+            <groupId>io.javalin</groupId>
+            <artifactId>javalin-testtools</artifactId>
+            <version>${javalin.version}</version>
+            <scope>test</scope>
+        </dependency>
         <dependency>
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter</artifactId>
@@ -167,6 +188,63 @@
                     <excludedGroups>ui,performance</excludedGroups>
                     <argLine>${surefire.extraArgLine}</argLine>
                 </configuration>
+            </plugin>
+
+            <!--
+                Jar ejecutable de la API (sin JavaFX ni GraphStream):
+                  target/detection-relations-1.0-SNAPSHOT-api.jar
+                  java -jar target/detection-relations-1.0-SNAPSHOT-api.jar
+            -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-shade-plugin</artifactId>
+                <version>3.6.2</version>
+                <executions>
+                    <execution>
+                        <id>api-jar</id>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>shade</goal>
+                        </goals>
+                        <configuration>
+                            <shadedArtifactAttached>true</shadedArtifactAttached>
+                            <shadedClassifierName>api</shadedClassifierName>
+                            <createDependencyReducedPom>false</createDependencyReducedPom>
+                            <artifactSet>
+                                <excludes>
+                                    <exclude>org.openjfx:*</exclude>
+                                    <exclude>org.graphstream:*</exclude>
+                                </excludes>
+                            </artifactSet>
+                            <filters>
+                                <filter>
+                                    <artifact>*:*</artifact>
+                                    <excludes>
+                                        <exclude>module-info.class</exclude>
+                                        <exclude>META-INF/versions/*/module-info.class</exclude>
+                                        <exclude>META-INF/*.SF</exclude>
+                                        <exclude>META-INF/*.DSA</exclude>
+                                        <exclude>META-INF/*.RSA</exclude>
+                                        <exclude>META-INF/MANIFEST.MF</exclude>
+                                        <exclude>org/example/ui/**</exclude>
+                                        <exclude>org/example/App*.class</exclude>
+                                        <exclude>style*.css</exclude>
+                                    </excludes>
+                                </filter>
+                            </filters>
+                            <transformers>
+                                <transformer implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer"/>
+                                <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
+                                    <mainClass>org.example.api.RelationsApiServer</mainClass>
+                                    <manifestEntries>
+                                        <Multi-Release>true</Multi-Release>
+                                        <Enable-Native-Access>ALL-UNNAMED</Enable-Native-Access>
+                                    </manifestEntries>
+                                </transformer>
+                            </transformers>
+                        </configuration>
+                    </execution>
+                </executions>
             </plugin>
         </plugins>
     </build>
