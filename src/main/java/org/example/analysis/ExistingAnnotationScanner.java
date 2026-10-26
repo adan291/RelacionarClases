@@ -1,6 +1,6 @@
 package org.example.analysis;
 
-import com.github.javaparser.StaticJavaParser;
+
 import com.github.javaparser.ast.CompilationUnit;
 import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
 import com.github.javaparser.ast.body.FieldDeclaration;
@@ -77,7 +77,7 @@ public class ExistingAnnotationScanner {
     private List<RelacionDetectada> scanFile(File file) throws IOException {
         List<RelacionDetectada> relations = new ArrayList<>();
         
-        CompilationUnit cu = StaticJavaParser.parse(file);
+        CompilationUnit cu = JavaParsers.parse(file);
         
         cu.findAll(ClassOrInterfaceDeclaration.class).forEach(clazz -> {
             String className = clazz.getNameAsString();

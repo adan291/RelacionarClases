@@ -14,7 +14,7 @@ import java.util.logging.Logger;
 
 import org.example.model.RelacionDetectada;
 
-import com.github.javaparser.StaticJavaParser;
+import org.example.analysis.JavaParsers;
 import com.github.javaparser.ast.CompilationUnit;
 import com.github.javaparser.ast.ImportDeclaration;
 import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
@@ -128,7 +128,7 @@ public class JPACodeGenerator {
             throws IOException {
         List<GenerationResult> results = new ArrayList<>();
         
-        CompilationUnit cu = StaticJavaParser.parse(classFile);
+        CompilationUnit cu = JavaParsers.parse(classFile);
         boolean modified = false;
         
         Optional<ClassOrInterfaceDeclaration> classDecl = cu.findFirst(ClassOrInterfaceDeclaration.class);

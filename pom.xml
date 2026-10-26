@@ -8,12 +8,30 @@
     <version>1.0-SNAPSHOT</version>
 
     <properties>
-        <java.version>21</java.version>
-        <javafx.version>21.0.3</javafx.version>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
+        <java.version>25</java.version>
+        <maven.compiler.release>${java.version}</maven.compiler.release>
+
+        <javafx.version>25.0.5</javafx.version>
+        <javaparser.version>3.27.1</javaparser.version>
+        <gson.version>2.15.0</gson.version>
+        <commons-text.version>1.14.0</commons-text.version>
+        <graphstream.version>2.0</graphstream.version>
+
+        <junit.version>5.13.4</junit.version>
+        <jqwik.version>1.9.3</jqwik.version>
+        <mockito.version>5.24.0</mockito.version>
+        <testfx.version>4.0.18</testfx.version>
+        <!-- No hay Monocle para JavaFX 25: 21.0.2 es la última publicada. Los tests de UI están excluidos. -->
+        <monocle.version>21.0.2</monocle.version>
+
+        <!-- Argumentos extra de la JVM de los tests (el perfil valhalla añade enable-preview) -->
+        <surefire.extraArgLine></surefire.extraArgLine>
     </properties>
 
     <dependencies>
-        <!-- ✅ JavaFX -->
+        <!-- JavaFX -->
         <dependency>
             <groupId>org.openjfx</groupId>
             <artifactId>javafx-controls</artifactId>
@@ -25,107 +43,114 @@
             <version>${javafx.version}</version>
         </dependency>
 
-        <!-- ✅ JavaParser para analizar código Java -->
+        <!-- JavaParser para analizar código Java -->
         <dependency>
             <groupId>com.github.javaparser</groupId>
             <artifactId>javaparser-core</artifactId>
-            <version>3.26.1</version>
+            <version>${javaparser.version}</version>
         </dependency>
 
-        <!-- ✅ GraphStream para diagramas -->
+        <!-- GraphStream para diagramas -->
         <dependency>
             <groupId>org.graphstream</groupId>
             <artifactId>gs-core</artifactId>
-            <version>2.0</version>
+            <version>${graphstream.version}</version>
         </dependency>
         <dependency>
             <groupId>org.graphstream</groupId>
             <artifactId>gs-ui-javafx</artifactId>
-            <version>2.0</version>
+            <version>${graphstream.version}</version>
         </dependency>
 
-        <!-- ✅ Gson para exportar y leer datos -->
+        <!-- Gson para exportar y leer datos -->
         <dependency>
             <groupId>com.google.code.gson</groupId>
             <artifactId>gson</artifactId>
-            <version>2.10.1</version>
+            <version>${gson.version}</version>
         </dependency>
 
-        <!-- ✅ Sustituto de simmetrics: Apache Commons Text -->
+        <!-- Similitud de cadenas (Jaro-Winkler, Levenshtein) -->
         <dependency>
             <groupId>org.apache.commons</groupId>
             <artifactId>commons-text</artifactId>
-            <version>1.14.0</version>
+            <version>${commons-text.version}</version>
         </dependency>
 
-        <!-- ✅ JUnit 5 for unit testing -->
+        <!-- Tests -->
         <dependency>
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter</artifactId>
-            <version>5.10.2</version>
+            <version>${junit.version}</version>
             <scope>test</scope>
         </dependency>
-
-        <!-- ✅ jqwik for property-based testing -->
         <dependency>
             <groupId>net.jqwik</groupId>
             <artifactId>jqwik</artifactId>
-            <version>1.8.2</version>
+            <version>${jqwik.version}</version>
             <scope>test</scope>
         </dependency>
-
-        <!-- ✅ Mockito for mocking in tests -->
         <dependency>
             <groupId>org.mockito</groupId>
             <artifactId>mockito-core</artifactId>
-            <version>5.11.0</version>
+            <version>${mockito.version}</version>
             <scope>test</scope>
         </dependency>
-
-        <!-- ✅ TestFX for JavaFX UI testing -->
         <dependency>
             <groupId>org.testfx</groupId>
             <artifactId>testfx-junit5</artifactId>
-            <version>4.0.18</version>
+            <version>${testfx.version}</version>
             <scope>test</scope>
         </dependency>
-
-        <!-- ✅ Monocle for headless JavaFX testing -->
         <dependency>
             <groupId>org.testfx</groupId>
             <artifactId>openjfx-monocle</artifactId>
-            <version>jdk-12.0.1+2</version>
+            <version>${monocle.version}</version>
             <scope>test</scope>
         </dependency>
     </dependencies>
 
+    <dependencyManagement>
+        <dependencies>
+            <!-- jqwik y JUnit comparten la plataforma: se fija la misma versión para ambos -->
+            <dependency>
+                <groupId>org.junit</groupId>
+                <artifactId>junit-bom</artifactId>
+                <version>${junit.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
     <build>
         <plugins>
-            <!-- ✅ Compilar con Java 21 -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
-                <version>3.11.0</version>
+                <version>3.14.1</version>
                 <configuration>
-                    <release>${java.version}</release>
+                    <release>${maven.compiler.release}</release>
                 </configuration>
             </plugin>
 
-            <!-- ✅ Ejecutar JavaFX -->
+            <!-- Ejecutar la UI: mvn javafx:run -->
             <plugin>
                 <groupId>org.openjfx</groupId>
                 <artifactId>javafx-maven-plugin</artifactId>
                 <version>0.0.8</version>
                 <configuration>
                     <mainClass>org.example.App</mainClass>
+                    <options>
+                        <!-- JavaFX 24+ usa métodos restringidos (FFM) desde javafx.graphics -->
+                        <option>--enable-native-access=javafx.graphics</option>
+                    </options>
                 </configuration>
             </plugin>
 
-            <!-- ✅ Maven Surefire Plugin for JUnit 5 and jqwik -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-surefire-plugin</artifactId>
-                <version>3.2.5</version>
+                <version>3.5.6</version>
                 <configuration>
                     <includes>
                         <include>**/*Test.java</include>
@@ -135,6 +160,7 @@
                     <!-- Test tag configuration: use -Dgroups=integration,e2e to run specific tags -->
                     <!-- By default, exclude UI and performance tests -->
                     <excludedGroups>ui,performance</excludedGroups>
+                    <argLine>${surefire.extraArgLine}</argLine>
                 </configuration>
             </plugin>
         </plugins>
@@ -152,7 +178,6 @@
                     <plugin>
                         <groupId>org.apache.maven.plugins</groupId>
                         <artifactId>maven-surefire-plugin</artifactId>
-                        <version>3.2.5</version>
                         <configuration>
                             <includes>
                                 <include>**/*Test.java</include>

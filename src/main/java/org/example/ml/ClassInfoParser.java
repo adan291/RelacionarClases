@@ -12,7 +12,7 @@ import java.util.logging.Logger;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-import com.github.javaparser.StaticJavaParser;
+import org.example.analysis.JavaParsers;
 import com.github.javaparser.ast.CompilationUnit;
 import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
 import com.github.javaparser.ast.body.ConstructorDeclaration;
@@ -120,7 +120,7 @@ public class ClassInfoParser {
     public Map<String, ClassInfo> parseFile(File file) throws IOException {
         Map<String, ClassInfo> result = new HashMap<>();
         
-        CompilationUnit cu = StaticJavaParser.parse(file);
+        CompilationUnit cu = JavaParsers.parse(file);
         String packageName = cu.getPackageDeclaration()
             .map(pd -> pd.getNameAsString())
             .orElse("");
@@ -231,7 +231,7 @@ public class ClassInfoParser {
      */
     public ClassInfo parseSource(String sourceCode) {
         try {
-            CompilationUnit cu = StaticJavaParser.parse(sourceCode);
+            CompilationUnit cu = JavaParsers.parse(sourceCode);
             
             return cu.findFirst(ClassOrInterfaceDeclaration.class)
                 .filter(c -> !c.isInterface())

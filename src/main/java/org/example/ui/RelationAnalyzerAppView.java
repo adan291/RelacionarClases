@@ -98,7 +98,8 @@ public class RelationAnalyzerAppView {
     
     // Filtros
     private final ObservableList<RelacionDetectada> allRelations = FXCollections.observableArrayList();
-    private FilteredList<RelacionDetectada> filteredRelations;
+    // Se crea aquí y no en setupFilters(): setupBulkActions() la necesita antes y la UI no arrancaba (NPE)
+    private final FilteredList<RelacionDetectada> filteredRelations = new FilteredList<>(allRelations, p -> true);
     private final ComboBox<String> tipoFilter = new ComboBox<>();
     private final ComboBox<String> sourceFilter = new ComboBox<>();
     private final Slider confidenceSlider;
@@ -268,7 +269,6 @@ public class RelationAnalyzerAppView {
     }
 
     private void setupFilters() {
-        filteredRelations = new FilteredList<>(allRelations, p -> true);
         
         // Tipo filter
         tipoFilter.getItems().addAll("Todos", "OneToOne", "OneToMany", "ManyToOne", "ManyToMany");

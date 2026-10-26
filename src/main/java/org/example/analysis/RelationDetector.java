@@ -20,7 +20,7 @@ import java.util.stream.Stream;
 import org.example.model.RelacionDetectada;
 
 import com.github.javaparser.ParseProblemException;
-import com.github.javaparser.StaticJavaParser;
+
 import com.github.javaparser.ast.CompilationUnit;
 import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
 import com.github.javaparser.ast.body.FieldDeclaration;
@@ -116,7 +116,7 @@ public class RelationDetector {
 
         for (File file : javaFiles) {
             try {
-                CompilationUnit cu = StaticJavaParser.parse(file);
+                CompilationUnit cu = JavaParsers.parse(file);
 
                 cu.findAll(ClassOrInterfaceDeclaration.class).forEach(clazz -> {
                     List<String> fields = clazz.getFields().stream()
