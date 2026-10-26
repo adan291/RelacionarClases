@@ -5,6 +5,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.logging.Level;
@@ -19,6 +20,8 @@ import com.github.javaparser.ast.body.ConstructorDeclaration;
 import com.github.javaparser.ast.body.FieldDeclaration;
 import com.github.javaparser.ast.body.VariableDeclarator;
 import com.github.javaparser.ast.expr.AnnotationExpr;
+import com.github.javaparser.ast.expr.MemberValuePair;
+import com.github.javaparser.ast.expr.NormalAnnotationExpr;
 import com.github.javaparser.ast.type.Type;
 
 /**
@@ -60,7 +63,28 @@ public class ClassInfoParser {
     public Map<String, ClassInfo> parseDirectory(File sourceDir, 
                                                   List<String> ignoredPaths,
                                                   List<String> fileExtensions) throws IOException {
-        Map<String, ClassInfo> result = new HashMap<>();
+        return parseDirectory(sourceDir, ignoredPaths, fileExtensions, false, new HashMap<>());
+    }
+
+    /**
+     * Parsea el directorio una sola vez para el análisis completo: incluye también las interfaces
+     * (marcadas con {@link ClassInfo#isInterfaceType()}) y respeta el orden en que se recorren los
+     * ficheros. Con este resultado se obtienen las relaciones estructurales, los nombres para el
+     * análisis semántico, las features de ML y las anotaciones JPA existentes.
+     *
+     * @return mapa en orden de recorrido (un nombre repetido conserva la posición de la primera vez)
+     */
+    public Map<String, ClassInfo> parseProject(File sourceDir,
+                                               List<String> ignoredPaths,
+                                               List<String> fileExtensions) throws IOException {
+        return parseDirectory(sourceDir, ignoredPaths, fileExtensions, true, new LinkedHashMap<>());
+    }
+
+    private Map<String, ClassInfo> parseDirectory(File sourceDir,
+                                                  List<String> ignoredPaths,
+                                                  List<String> fileExtensions,
+                                                  boolean includeInterfaces,
+                                                  Map<String, ClassInfo> result) throws IOException {
         
         if (!sourceDir.exists() || !sourceDir.isDirectory()) {
             LOGGER.warning(() -> "Invalid directory: " + sourceDir.getAbsolutePath());
@@ -99,7 +123,7 @@ public class ClassInfoParser {
         
         for (File file : javaFiles) {
             try {
-                Map<String, ClassInfo> parsed = parseFile(file);
+                Map<String, ClassInfo> parsed = parseFile(file, includeInterfaces);
                 result.putAll(parsed);
             } catch (Exception e) {
                 LOGGER.log(Level.WARNING, e, () -> "Error parsing file: " + file.getName());
@@ -118,7 +142,11 @@ public class ClassInfoParser {
      * @throws IOException if file cannot be read
      */
     public Map<String, ClassInfo> parseFile(File file) throws IOException {
-        Map<String, ClassInfo> result = new HashMap<>();
+        return parseFile(file, false);
+    }
+
+    private Map<String, ClassInfo> parseFile(File file, boolean includeInterfaces) throws IOException {
+        Map<String, ClassInfo> result = new LinkedHashMap<>();
         
         CompilationUnit cu = JavaParsers.parse(file);
         String packageName = cu.getPackageDeclaration()
@@ -126,8 +154,9 @@ public class ClassInfoParser {
             .orElse("");
         
         cu.findAll(ClassOrInterfaceDeclaration.class).forEach(clazz -> {
-            if (!clazz.isInterface()) {
+            if (!clazz.isInterface() || includeInterfaces) {
                 ClassInfo classInfo = parseClass(clazz, packageName);
+                classInfo.setInterfaceType(clazz.isInterface());
                 result.put(classInfo.getClassName(), classInfo);
             }
         });
@@ -192,7 +221,8 @@ public class ClassInfoParser {
             String genericType = isCollection ? cardinalityAnalyzer.extractGenericType(typeString) : null;
             
             // Create FieldInfo
-            FieldInfo fieldInfo = new FieldInfo(fieldName, typeString, isCollection, genericType, annotations);
+            FieldInfo fieldInfo = new FieldInfo(fieldName, typeString, isCollection, genericType, annotations,
+                relationMappedBy(field));
             classInfo.addField(fieldInfo);
             
             // Also add to legacy fieldTypes list
@@ -203,6 +233,27 @@ public class ClassInfoParser {
                 classInfo.addCollectionType(genericType);
             }
         }
+    }
+
+    /**
+     * {@code mappedBy} de la primera anotación JPA de relación del campo (igual que hacía
+     * ExistingAnnotationScanner al recorrer los ficheros por su cuenta).
+     */
+    private static String relationMappedBy(FieldDeclaration field) {
+        for (AnnotationExpr annotation : field.getAnnotations()) {
+            if (org.example.analysis.ExistingAnnotationScanner.relationTypeOf(annotation.getNameAsString()) == null) {
+                continue;
+            }
+            if (annotation instanceof NormalAnnotationExpr normal) {
+                for (MemberValuePair pair : normal.getPairs()) {
+                    if ("mappedBy".equals(pair.getNameAsString())) {
+                        return pair.getValue().toString().replace("\"", "");
+                    }
+                }
+            }
+            return null;
+        }
+        return null;
     }
 
     /**

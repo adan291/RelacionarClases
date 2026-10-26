@@ -1,6 +1,9 @@
 package org.example.ml;
 
+import java.util.Locale;
+
 import org.apache.commons.text.similarity.JaroWinklerSimilarity;
+import org.example.analysis.Levenshtein;
 
 /**
  * Extracts numerical features from class pairs for the ML model.
@@ -89,23 +92,28 @@ public class FeatureExtractor {
         String safeFieldName = fieldName != null ? fieldName : safeDestino.toLowerCase();
         String safeFieldType = fieldType != null ? fieldType : "";
         
+        String origenLower = safeOrigen.toLowerCase(Locale.ROOT);
+        String destinoLower = safeDestino.toLowerCase(Locale.ROOT);
+        
         // === Name Features (0-7) ===
-        features[0] = calculateJaroWinklerSimilarity(safeOrigen, safeDestino);
-        features[1] = calculateLevenshteinSimilarity(safeOrigen, safeDestino);
-        features[2] = namingAnalyzer.calculateConsistency(safeFieldName, safeDestino);
+        features[0] = jaroWinkler(safeOrigen, safeDestino, origenLower, destinoLower);
+        features[1] = levenshteinSimilarity(safeOrigen, safeDestino, origenLower, destinoLower);
+        // Las features 2 y 7 son hoy la misma medida: se calcula una sola vez
+        double consistency = namingAnalyzer.calculateConsistency(safeFieldName, safeDestino);
+        features[2] = consistency;
         features[3] = namingAnalyzer.hasIdSuffix(safeFieldName) ? 1.0 : 0.0;
         features[4] = namingAnalyzer.hasCollectionSuffix(safeFieldName) ? 1.0 : 0.0;
         features[5] = namingAnalyzer.isPlural(safeFieldName) ? 1.0 : 0.0;
         features[6] = namingAnalyzer.hasParentChildPattern(safeOrigen, safeDestino) ? 1.0 : 0.0;
-        features[7] = namingAnalyzer.calculateConsistency(safeFieldName, safeDestino);
+        features[7] = consistency;
         
         // === Structure Features (8-15) ===
         features[8] = normalizeFieldCount(origenInfo);
         features[9] = normalizeFieldCount(destinoInfo);
         features[10] = hasInheritance(origenInfo, destinoInfo) ? 1.0 : 0.0;
         features[11] = normalizeSharedInterfaces(origenInfo, destinoInfo);
-        features[12] = normalizeLength(commonPrefixLength(safeOrigen, safeDestino));
-        features[13] = normalizeLength(commonSuffixLength(safeOrigen, safeDestino));
+        features[12] = normalizeLength(commonPrefixLength(origenLower, destinoLower));
+        features[13] = normalizeLength(commonSuffixLength(origenLower, destinoLower));
         features[14] = hasExistingAnnotation(origenInfo, safeFieldName) ? 1.0 : 0.0;
         features[15] = hasIdField(origenInfo) ? 1.0 : 0.0;
         
@@ -116,10 +124,22 @@ public class FeatureExtractor {
         features[19] = cardinalityAnalyzer.isMapType(safeFieldType) ? 1.0 : 0.0;
         features[20] = cardinalityAnalyzer.isOptionalType(safeFieldType) ? 1.0 : 0.0;
         features[21] = cardinalityAnalyzer.isArrayType(safeFieldType) ? 1.0 : 0.0;
-        features[22] = (safeTipo.equals("OneToOne") || safeTipo.equals("ManyToOne")) ? 1.0 : 0.0;
-        features[23] = (safeTipo.equals("OneToMany") || safeTipo.equals("ManyToMany")) ? 1.0 : 0.0;
+        applyRelationType(features, safeTipo);
         
         return features;
+    }
+
+    /**
+     * Escribe en el vector las features 22 y 23, las únicas que dependen del tipo de relación.
+     * Permite reutilizar un vector ya calculado para probar los cuatro tipos.
+     *
+     * @param features vector de {@link #FEATURE_COUNT} posiciones
+     * @param tipoRelacion tipo candidato (null se trata como vacío)
+     */
+    public static void applyRelationType(double[] features, String tipoRelacion) {
+        String tipo = tipoRelacion != null ? tipoRelacion : "";
+        features[22] = (tipo.equals("OneToOne") || tipo.equals("ManyToOne")) ? 1.0 : 0.0;
+        features[23] = (tipo.equals("OneToMany") || tipo.equals("ManyToMany")) ? 1.0 : 0.0;
     }
     
     /**
@@ -133,12 +153,15 @@ public class FeatureExtractor {
         String safeDestino = destino != null ? destino : "";
         String safeTipo = tipoRelacion != null ? tipoRelacion : "";
         
-        features[0] = calculateJaroWinklerSimilarity(safeOrigen, safeDestino);
-        features[1] = calculateLevenshteinSimilarity(safeOrigen, safeDestino);
+        String origenLower = safeOrigen.toLowerCase(Locale.ROOT);
+        String destinoLower = safeDestino.toLowerCase(Locale.ROOT);
+        
+        features[0] = jaroWinkler(safeOrigen, safeDestino, origenLower, destinoLower);
+        features[1] = levenshteinSimilarity(safeOrigen, safeDestino, origenLower, destinoLower);
         features[2] = normalizeLength(safeOrigen.length());
         features[3] = normalizeLength(safeDestino.length());
-        features[4] = normalizeLength(commonPrefixLength(safeOrigen, safeDestino));
-        features[5] = normalizeLength(commonSuffixLength(safeOrigen, safeDestino));
+        features[4] = normalizeLength(commonPrefixLength(origenLower, destinoLower));
+        features[5] = normalizeLength(commonSuffixLength(origenLower, destinoLower));
         features[6] = hasCollection(origenInfo) ? 1.0 : 0.0;
         features[7] = hasCollection(destinoInfo) ? 1.0 : 0.0;
         features[8] = safeTipo.equalsIgnoreCase("OneToOne") ? 1.0 : 0.0;
@@ -157,57 +180,31 @@ public class FeatureExtractor {
     }
 
     /**
-     * Calculates Jaro-Winkler similarity between two strings.
+     * Calculates Jaro-Winkler similarity between two strings (case-insensitive).
      * Returns 0.0 for empty strings.
      */
-    private double calculateJaroWinklerSimilarity(String a, String b) {
+    private double jaroWinkler(String a, String b, String aLower, String bLower) {
         if (a.isEmpty() || b.isEmpty()) {
             return a.equals(b) ? 1.0 : 0.0;
         }
-        double similarity = JARO_WINKLER.apply(a.toLowerCase(), b.toLowerCase());
-        return clamp(similarity);
+        return clamp(JARO_WINKLER.apply(aLower, bLower));
     }
 
     /**
-     * Calculates normalized Levenshtein similarity.
+     * Calculates normalized Levenshtein similarity (case-insensitive).
      * Returns 1.0 - (distance / maxLength), clamped to [0, 1].
      */
-    private double calculateLevenshteinSimilarity(String a, String b) {
+    private double levenshteinSimilarity(String a, String b, String aLower, String bLower) {
         if (a.isEmpty() && b.isEmpty()) {
             return 1.0;
         }
         if (a.isEmpty() || b.isEmpty()) {
             return 0.0;
         }
-        int distance = levenshteinDistance(a.toLowerCase(), b.toLowerCase());
+        int distance = Levenshtein.distance(aLower, bLower);
         int maxLength = Math.max(a.length(), b.length());
         double similarity = 1.0 - ((double) distance / maxLength);
         return clamp(similarity);
-    }
-
-    /**
-     * Computes Levenshtein distance between two strings.
-     */
-    private int levenshteinDistance(String a, String b) {
-        int[][] dp = new int[a.length() + 1][b.length() + 1];
-        
-        for (int i = 0; i <= a.length(); i++) {
-            dp[i][0] = i;
-        }
-        for (int j = 0; j <= b.length(); j++) {
-            dp[0][j] = j;
-        }
-        
-        for (int i = 1; i <= a.length(); i++) {
-            for (int j = 1; j <= b.length(); j++) {
-                int cost = (a.charAt(i - 1) == b.charAt(j - 1)) ? 0 : 1;
-                dp[i][j] = Math.min(
-                    Math.min(dp[i - 1][j] + 1, dp[i][j - 1] + 1),
-                    dp[i - 1][j - 1] + cost
-                );
-            }
-        }
-        return dp[a.length()][b.length()];
     }
 
     /**
@@ -218,13 +215,11 @@ public class FeatureExtractor {
     }
 
     /**
-     * Calculates the length of the common prefix between two strings.
+     * Calculates the length of the common prefix between two lower-cased strings.
      */
-    private int commonPrefixLength(String a, String b) {
-        int minLength = Math.min(a.length(), b.length());
+    private int commonPrefixLength(String aLower, String bLower) {
+        int minLength = Math.min(aLower.length(), bLower.length());
         int prefixLength = 0;
-        String aLower = a.toLowerCase();
-        String bLower = b.toLowerCase();
         
         for (int i = 0; i < minLength; i++) {
             if (aLower.charAt(i) == bLower.charAt(i)) {
@@ -237,13 +232,11 @@ public class FeatureExtractor {
     }
 
     /**
-     * Calculates the length of the common suffix between two strings.
+     * Calculates the length of the common suffix between two lower-cased strings.
      */
-    private int commonSuffixLength(String a, String b) {
-        int minLength = Math.min(a.length(), b.length());
+    private int commonSuffixLength(String aLower, String bLower) {
+        int minLength = Math.min(aLower.length(), bLower.length());
         int suffixLength = 0;
-        String aLower = a.toLowerCase();
-        String bLower = b.toLowerCase();
         
         for (int i = 0; i < minLength; i++) {
             if (aLower.charAt(aLower.length() - 1 - i) == bLower.charAt(bLower.length() - 1 - i)) {

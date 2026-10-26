@@ -139,6 +139,68 @@ public class ExistingAnnotationScanner {
     }
 
     /**
+     * Relaciones JPA ya anotadas, a partir de un modelo ya parseado (sin volver a leer los ficheros).
+     * Usa las mismas reglas que {@link #scanExistingAnnotations(File)}: primera anotación de relación
+     * del campo, tipo destino sin {@code []} y, si es genérico, lo que hay entre '<' y el último '>'.
+     *
+     * @param clases modelo parseado (incluidas interfaces)
+     * @return relaciones existentes, marcadas como tales
+     */
+    public List<RelacionDetectada> scanExistingAnnotations(Map<String, org.example.ml.ClassInfo> clases) {
+        List<RelacionDetectada> existingRelations = new ArrayList<>();
+        for (Map.Entry<String, org.example.ml.ClassInfo> entry : clases.entrySet()) {
+            for (org.example.ml.FieldInfo field : entry.getValue().getFields()) {
+                String type = null;
+                for (String annotation : field.annotations()) {
+                    type = relationTypeOf(annotation);
+                    if (type != null) {
+                        break;
+                    }
+                }
+                if (type == null || field.type() == null) {
+                    continue;
+                }
+                String targetType = extractTargetType(elementType(field.type()));
+                if (targetType == null || targetType.isEmpty()) {
+                    continue;
+                }
+                RelacionDetectada rel = new RelacionDetectada(
+                    entry.getKey(), targetType, type, 1.0, PredictionSource.STRUCTURAL);
+                rel.setExistingAnnotation(true);
+                if (field.mappedBy() != null) {
+                    rel.setBidirectional(true);
+                    rel.setOwnerSide(false);
+                    rel.setMappedBy(field.mappedBy());
+                }
+                existingRelations.add(rel);
+            }
+        }
+        return existingRelations;
+    }
+
+    private static String elementType(String type) {
+        String t = type.trim();
+        while (t.endsWith("[]")) {
+            t = t.substring(0, t.length() - 2).trim();
+        }
+        return t;
+    }
+
+    /**
+     * @param annotationName nombre de la anotación tal y como aparece en el código
+     * @return OneToOne, OneToMany, ManyToOne o ManyToMany, o null si no es una anotación JPA de relación
+     */
+    public static String relationTypeOf(String annotationName) {
+        for (String jpaAnnotation : JPA_ANNOTATIONS) {
+            if (jpaAnnotation.equals(annotationName) || jpaAnnotation.endsWith("." + annotationName)) {
+                int lastDot = jpaAnnotation.lastIndexOf('.');
+                return lastDot >= 0 ? jpaAnnotation.substring(lastDot + 1) : jpaAnnotation;
+            }
+        }
+        return null;
+    }
+
+    /**
      * Extrae el tipo de relación de una anotación.
      */
     private String extractRelationType(String annotationName) {
@@ -156,8 +218,10 @@ public class ExistingAnnotationScanner {
      * Extrae el tipo destino de un campo anotado.
      */
     private String extractTargetType(FieldDeclaration field, AnnotationInfo info) {
-        String fieldType = field.getElementType().asString();
-        
+        return extractTargetType(field.getElementType().asString());
+    }
+
+    private static String extractTargetType(String fieldType) {
         // Si es colección, extraer tipo genérico
         if (fieldType.contains("<")) {
             int start = fieldType.indexOf('<');

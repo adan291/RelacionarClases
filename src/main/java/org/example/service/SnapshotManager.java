@@ -39,6 +39,9 @@ public class SnapshotManager {
     private static final String JSON_EXTENSION = ".json";
     private static final DateTimeFormatter ID_DATE_FORMAT = DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss");
     private static final Pattern SNAPSHOT_ID_PATTERN = Pattern.compile("^[A-Za-z0-9_-]{1,200}$");
+    private static final Pattern NON_ALNUM = Pattern.compile("[^a-zA-Z0-9]");
+    private static final Pattern MULTI_UNDERSCORE = Pattern.compile("_+");
+    private static final Pattern EDGE_UNDERSCORE = Pattern.compile("^_|_$");
     
     private final Gson gson;
     private final File snapshotsDirectory;
@@ -111,11 +114,11 @@ public class SnapshotManager {
             return "unnamed";
         }
         // Replace any non-alphanumeric character with underscore
-        String sanitized = projectName.replaceAll("[^a-zA-Z0-9]", "_");
+        String sanitized = NON_ALNUM.matcher(projectName).replaceAll("_");
         // Remove consecutive underscores
-        sanitized = sanitized.replaceAll("_+", "_");
+        sanitized = MULTI_UNDERSCORE.matcher(sanitized).replaceAll("_");
         // Remove leading/trailing underscores
-        sanitized = sanitized.replaceAll("^_|_$", "");
+        sanitized = EDGE_UNDERSCORE.matcher(sanitized).replaceAll("");
         // Ensure not empty after sanitization
         if (sanitized.isEmpty()) {
             return "unnamed";

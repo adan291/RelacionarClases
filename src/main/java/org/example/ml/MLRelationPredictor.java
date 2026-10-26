@@ -8,7 +8,6 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Supplier;
 import java.util.logging.Level;
 import java.util.logging.Logger;
-
 import org.example.config.ConfigManager;
 import org.example.config.PersistenceConfig;
 import org.example.model.RelacionDetectada;
@@ -143,67 +142,87 @@ public class MLRelationPredictor {
         }
         
         // Generate predictions for all class pairs
-        String[] relationTypes = {"OneToOne", "OneToMany", "ManyToOne", "ManyToMany"};
+        int n = classNames.size();
+        ClassInfo[] infos = new ClassInfo[n];
+        for (int i = 0; i < n; i++) {
+            infos[i] = classInfo != null ? classInfo.get(classNames.get(i)) : null;
+        }
         
-        for (int i = 0; i < classNames.size(); i++) {
-            for (int j = 0; j < classNames.size(); j++) {
+        for (int i = 0; i < n; i++) {
+            String origen = classNames.get(i);
+            ClassInfo origenInfo = infos[i];
+            for (int j = 0; j < n; j++) {
                 if (i == j) continue;
                 
-                String origen = classNames.get(i);
                 String destino = classNames.get(j);
+                ClassInfo destinoInfo = infos[j];
                 
-                ClassInfo origenInfo = classInfo != null ? classInfo.get(origen) : null;
-                ClassInfo destinoInfo = classInfo != null ? classInfo.get(destino) : null;
+                // El campo que referencia al destino no depende del tipo de relación:
+                // se busca una vez por par (antes se repetía para cada uno de los 4 tipos)
+                FieldInfo field = findFieldReferencing(origenInfo, destino);
+                String fieldName = field != null ? field.name() : null;
+                String fieldType = field != null ? field.type() : null;
                 
-                // Find best relation type for this pair
-                RelacionDetectada bestPrediction = null;
-                double bestConfidence = 0.0;
+                // Solo las features 22 y 23 dependen del tipo: el vector se calcula una vez por par
+                double[] features = featureExtractor.extractFeatures(
+                    origen, destino, RELATION_TYPES[0], origenInfo, destinoInfo, fieldName, fieldType);
                 
-                for (String tipo : relationTypes) {
-                    // Try to find a field in origen that references destino for enhanced features
-                    String fieldName = null;
-                    String fieldType = null;
-                    
-                    if (origenInfo != null) {
-                        for (FieldInfo field : origenInfo.getFields()) {
-                            String genericType = field.genericType();
-                            String baseType = field.type();
-                            
-                            // Check if field references the destination class
-                            if (destino.equals(genericType) || 
-                                baseType.contains(destino) ||
-                                baseType.equals(destino)) {
-                                fieldName = field.name();
-                                fieldType = field.type();
-                                break;
-                            }
-                        }
-                    }
-                    
-                    // Extract features with field-level information when available
-                    double[] features = featureExtractor.extractFeatures(
-                        origen, destino, tipo, origenInfo, destinoInfo, fieldName, fieldType);
-                    
-                    try {
-                        double confidence = current.predict(features);
-                        if (confidence > bestConfidence) {
-                            bestConfidence = confidence;
-                            bestPrediction = new RelacionDetectada(origen, destino, tipo, confidence);
-                        }
-                    } catch (Exception e) {
-                        // Skip this prediction if it fails
-                        LOGGER.log(Level.WARNING, "Prediction failed for " + origen + " -> " + destino + ": " + e.getMessage());
-                    }
-                }
+                PairScore best = bestType(current, origen, destino, features);
                 
                 // Only add predictions with reasonable confidence
-                if (bestPrediction != null && bestConfidence > 0.3) {
-                    predictions.add(bestPrediction);
+                if (best != null && best.confidence() > 0.3) {
+                    predictions.add(new RelacionDetectada(origen, destino,
+                        RELATION_TYPES[best.typeIndex()], best.confidence()));
                 }
             }
         }
         
         return predictions;
+    }
+
+    private static final String[] RELATION_TYPES = {"OneToOne", "OneToMany", "ManyToOne", "ManyToMany"};
+
+    /**
+     * Prueba los cuatro tipos sobre el mismo vector de features y devuelve el de mayor confianza
+     * (en empate gana el primero, como antes).
+     */
+    private PairScore bestType(LogisticRegressionModel current, String origen, String destino,
+                               double[] features) {
+        PairScore best = null;
+        for (int t = 0; t < RELATION_TYPES.length; t++) {
+            FeatureExtractor.applyRelationType(features, RELATION_TYPES[t]);
+            try {
+                double confidence = current.predict(features);
+                if (confidence > (best != null ? best.confidence() : 0.0)) {
+                    best = new PairScore(t, confidence);
+                }
+            } catch (Exception e) {
+                // Skip this prediction if it fails
+                LOGGER.log(Level.WARNING, "Prediction failed for " + origen + " -> " + destino + ": " + e.getMessage());
+            }
+        }
+        return best;
+    }
+
+    /**
+     * Busca en el origen el primer campo que referencia al destino.
+     */
+    static FieldInfo findFieldReferencing(ClassInfo origenInfo, String destino) {
+        if (origenInfo == null) {
+            return null;
+        }
+        for (FieldInfo field : origenInfo.getFields()) {
+            String genericType = field.genericType();
+            String baseType = field.type();
+            
+            // Check if field references the destination class
+            if (destino.equals(genericType) || 
+                baseType.contains(destino) ||
+                baseType.equals(destino)) {
+                return field;
+            }
+        }
+        return null;
     }
 
     /**

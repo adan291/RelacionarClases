@@ -5,6 +5,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -19,6 +20,7 @@ import org.example.ml.MLRelationPredictor;
 import org.example.ml.PredictionSource;
 import org.example.ml.ScoreCombiner;
 import org.example.model.RelacionDetectada;
+import org.example.model.RelationKey;
 import org.example.service.MemoryService;
 
 /**
@@ -38,7 +40,6 @@ public class IntelligentRelationAnalyzer {
 
     private static final Logger LOGGER = Logger.getLogger(IntelligentRelationAnalyzer.class.getName());
     
-    private final RelationDetector relationDetector;
     private final MemoryService memoryService;
     private final MLRelationPredictor mlPredictor;
     private final ScoreCombiner scoreCombiner;
@@ -56,7 +57,6 @@ public class IntelligentRelationAnalyzer {
     private Map<String, ClassInfo> classInfoCache = new HashMap<>();
 
     public IntelligentRelationAnalyzer(MemoryService memoryService) {
-        this.relationDetector = new RelationDetector();
         this.annotationScanner = new ExistingAnnotationScanner();
         this.memoryService = memoryService;
         this.mlPredictor = new MLRelationPredictor(memoryService);
@@ -75,7 +75,6 @@ public class IntelligentRelationAnalyzer {
     public IntelligentRelationAnalyzer(MemoryService memoryService, 
                                         MLRelationPredictor mlPredictor,
                                         ScoreCombiner scoreCombiner) {
-        this.relationDetector = new RelationDetector();
         this.annotationScanner = new ExistingAnnotationScanner();
         this.memoryService = memoryService;
         this.mlPredictor = mlPredictor != null ? mlPredictor : new MLRelationPredictor(memoryService);
@@ -96,7 +95,6 @@ public class IntelligentRelationAnalyzer {
                                         ScoreCombiner scoreCombiner,
                                         List<String> ignoredPaths,
                                         List<String> fileExtensions) {
-        this.relationDetector = new RelationDetector();
         this.annotationScanner = new ExistingAnnotationScanner();
         this.memoryService = memoryService;
         this.mlPredictor = mlPredictor != null ? mlPredictor : new MLRelationPredictor(memoryService);
@@ -126,20 +124,33 @@ public class IntelligentRelationAnalyzer {
                 return Collections.emptyList();
             }
 
-            // 1️⃣ Cargar clases y obtener relaciones estructurales
-            // Use configured ignored paths and file extensions
-            relationDetector.loadClasses(dir, ignoredPaths, fileExtensions);
-            List<RelacionDetectada> relacionesEstructurales = relationDetector.detectRelationsAsObjects();
-            
-            // Parse enhanced class info for ML features
-            classInfoCache = classInfoParser.parseDirectory(dir, ignoredPaths, fileExtensions);
-            LOGGER.fine(() -> "Parsed enhanced ClassInfo for " + classInfoCache.size() + " classes");
-            
-            List<String> classNames = new ArrayList<>(relationDetector.getClassNames());
-            relaciones = analizarPipeline(relacionesEstructurales, classNames, classInfoCache);
+            // 1️⃣ Un único parseo del directorio (antes eran tres: RelationDetector, ClassInfoParser
+            // y ExistingAnnotationScanner). Todo lo demás se deriva de ClassInfo/FieldInfo.
+            Map<String, ClassInfo> proyecto = classInfoParser.parseProject(dir, ignoredPaths, fileExtensions);
 
-            // 8️⃣ Escanear anotaciones existentes y marcar/filtrar
-            List<RelacionDetectada> existingAnnotations = annotationScanner.scanExistingAnnotations(dir);
+            // Mismo orden de iteración que el mapa que usaba RelationDetector (un HashMap rellenado
+            // en el orden de recorrido), para que los empates salgan igual que antes
+            Map<String, ClassInfo> porHash = new HashMap<>();
+            proyecto.forEach(porHash::put);
+            List<RelacionDetectada> relacionesEstructurales = RelationDetector.detectRelations(porHash);
+            List<String> classNames = new ArrayList<>(new HashSet<>(porHash.keySet()));
+
+            // Para ML las interfaces van sin información, como cuando ClassInfoParser no las incluía
+            Map<String, ClassInfo> mlInfo = new HashMap<>();
+            Map<String, ClassInfo> soloClases = new HashMap<>();
+            proyecto.forEach((name, info) -> {
+                mlInfo.put(name, info.isInterfaceType() ? new ClassInfo(name) : info);
+                if (!info.isInterfaceType()) {
+                    soloClases.put(name, info);
+                }
+            });
+            classInfoCache = soloClases;
+            LOGGER.fine(() -> "Parsed enhanced ClassInfo for " + soloClases.size() + " classes");
+
+            relaciones = analizarPipeline(relacionesEstructurales, classNames, mlInfo);
+
+            // 8️⃣ Anotaciones existentes (derivadas del mismo parseo) y marcar/filtrar
+            List<RelacionDetectada> existingAnnotations = annotationScanner.scanExistingAnnotations(proyecto);
             if (!existingAnnotations.isEmpty()) {
                 LOGGER.info(() -> "Anotaciones JPA existentes encontradas: " + existingAnnotations.size());
                 relaciones = annotationScanner.filterAlreadyAnnotated(relaciones, existingAnnotations);
@@ -195,7 +206,10 @@ public class IntelligentRelationAnalyzer {
         LOGGER.fine(() -> "Relaciones estructurales detectadas: " + relacionesEstructurales.size());
 
         // 2️⃣ Inferir relaciones semánticas (por similitud de nombres)
-        List<RelacionDetectada> relacionesSemanticas = inferirRelacionesSemanticas(classNames);
+        // Caché de similitudes de este análisis: la matriz de pares se calcula una vez y la
+        // reutiliza el ajuste por memoria
+        NameSimilarityCache sims = new NameSimilarityCache(classNames);
+        List<RelacionDetectada> relacionesSemanticas = inferirRelacionesSemanticas(classNames, sims);
         
         // Mark semantic relations with their source
         for (RelacionDetectada r : relacionesSemanticas) {
@@ -215,7 +229,7 @@ public class IntelligentRelationAnalyzer {
         relaciones = combinarPuntuaciones(relaciones, relacionesML);
 
         // 5️⃣ Ajustar confianza según memoria previa
-        List<RelacionDetectada> ajustadas = ajustarPorMemoria(relaciones);
+        List<RelacionDetectada> ajustadas = ajustarPorMemoria(relaciones, sims);
 
         // 6️⃣ Eliminar duplicados y ordenar por confianza descendente
         relaciones = new ArrayList<>(new LinkedHashSet<>(ajustadas));
@@ -307,92 +321,89 @@ public class IntelligentRelationAnalyzer {
      */
     private List<RelacionDetectada> combinarPuntuaciones(List<RelacionDetectada> relacionesBase,
                                                           List<RelacionDetectada> relacionesML) {
-        // Create a map to track scores by relation key.
+        // Puntuaciones por clave (origen, destino, tipo). ScoreInfo es inmutable: cada fuente
+        // sustituye la entrada por una copia actualizada.
         // LinkedHashMap: el orden de salida (y por tanto los empates al ordenar y la detección
         // bidireccional, que se queda con la última relación de cada par) no depende del hash.
-        Map<String, ScoreInfo> scoreMap = new LinkedHashMap<>();
+        Map<RelationKey, ScoreInfo> scoreMap = new LinkedHashMap<>();
         
         // Process base relations (structural and semantic)
         for (RelacionDetectada r : relacionesBase) {
-            String key = r.getClaveMemoria();
-            ScoreInfo info = scoreMap.computeIfAbsent(key, k -> new ScoreInfo(r));
-            
-            if (r.getSource() == PredictionSource.STRUCTURAL) {
-                info.structuralScore = r.getConfianza();
-            } else if (r.getSource() == PredictionSource.SEMANTIC) {
-                info.semanticScore = Math.max(info.semanticScore, r.getConfianza());
+            RelationKey key = RelationKey.of(r);
+            ScoreInfo info = scoreMap.get(key);
+            if (info == null) {
+                info = ScoreInfo.empty(key);
             }
+            if (r.getSource() == PredictionSource.STRUCTURAL) {
+                info = info.withStructural(r.getConfianza());
+            } else if (r.getSource() == PredictionSource.SEMANTIC) {
+                info = info.withSemanticMax(r.getConfianza());
+            }
+            scoreMap.put(key, info);
         }
         
         // Process ML relations
         for (RelacionDetectada r : relacionesML) {
-            String key = r.getClaveMemoria();
-            ScoreInfo info = scoreMap.computeIfAbsent(key, k -> new ScoreInfo(r));
-            info.mlScore = Math.max(info.mlScore, r.getConfianza());
+            RelationKey key = RelationKey.of(r);
+            ScoreInfo info = scoreMap.get(key);
+            if (info == null) {
+                info = ScoreInfo.empty(key);
+            }
+            scoreMap.put(key, info.withMlMax(r.getConfianza()));
         }
         
         // Combine scores and create final relations
-        List<RelacionDetectada> resultado = new ArrayList<>();
+        List<RelacionDetectada> resultado = new ArrayList<>(scoreMap.size());
         for (ScoreInfo info : scoreMap.values()) {
             double combinedScore;
             PredictionSource primarySource;
             
             // If we have ML score, use weighted combination
-            if (info.mlScore > 0) {
-                combinedScore = scoreCombiner.combine(info.mlScore, info.structuralScore, info.semanticScore);
-                primarySource = scoreCombiner.getPrimarySource(info.mlScore, info.structuralScore, info.semanticScore);
+            if (info.mlScore() > 0) {
+                combinedScore = scoreCombiner.combine(info.mlScore(), info.structuralScore(), info.semanticScore());
+                primarySource = scoreCombiner.getPrimarySource(info.mlScore(), info.structuralScore(), info.semanticScore());
             } else {
                 // No ML available, use simple combination of structural and semantic
                 // Structural gets higher weight when no ML
-                combinedScore = info.structuralScore * 0.6 + info.semanticScore * 0.4;
-                primarySource = info.structuralScore >= info.semanticScore ? 
+                combinedScore = info.structuralScore() * 0.6 + info.semanticScore() * 0.4;
+                primarySource = info.structuralScore() >= info.semanticScore() ? 
                     PredictionSource.STRUCTURAL : PredictionSource.SEMANTIC;
             }
             
-            RelacionDetectada combined = new RelacionDetectada(
-                info.relacion.getOrigen(),
-                info.relacion.getDestino(),
-                info.relacion.getTipo(),
-                combinedScore,
-                primarySource
-            );
-            resultado.add(combined);
+            RelationKey key = info.key();
+            resultado.add(new RelacionDetectada(key.origen(), key.destino(), key.tipo(), combinedScore, primarySource));
         }
         
         return resultado;
     }
-    
-    /**
-     * Helper class to track scores from different sources.
-     */
-    private static class ScoreInfo {
-        RelacionDetectada relacion;
-        double mlScore = 0.0;
-        double structuralScore = 0.0;
-        double semanticScore = 0.0;
-        
-        ScoreInfo(RelacionDetectada relacion) {
-            this.relacion = relacion;
-        }
-    }
 
+    private static final String[] TIPOS = {"OneToOne", "OneToMany", "ManyToOne", "ManyToMany"};
 
     /**
      * Intenta inferir relaciones adicionales comparando nombres de clases (semántico).
+     * La similitud de cada par se calcula una vez (antes, una vez por cada uno de los 4 tipos)
+     * y queda en la caché para el ajuste por memoria.
      */
-    private List<RelacionDetectada> inferirRelacionesSemanticas(List<String> classNames) {
+    private List<RelacionDetectada> inferirRelacionesSemanticas(List<String> classNames, NameSimilarityCache sims) {
         List<RelacionDetectada> result = new ArrayList<>();
-        List<String> tipos = List.of("OneToOne", "OneToMany", "ManyToOne", "ManyToMany");
+        int n = classNames.size();
+        int[] ids = new int[n];
+        for (int i = 0; i < n; i++) {
+            ids[i] = sims.id(classNames.get(i));
+        }
 
-        for (String origen : classNames) {
-            for (String destino : classNames) {
-                if (!origen.equals(destino)) {
-                    for (String tipo : tipos) {
-                        double sim = SemanticSimilarity.compare(origen, destino);
-                        if (sim > 0.7) {
-                            double confianza = Math.min(1.0, 0.5 + sim * 0.5);
-                            result.add(new RelacionDetectada(origen, destino, tipo, confianza));
-                        }
+        for (int i = 0; i < n; i++) {
+            String origen = classNames.get(i);
+            for (int j = 0; j < n; j++) {
+                String destino = classNames.get(j);
+                if (origen.equals(destino)) {
+                    continue;
+                }
+                double sim = sims.sim(ids[i], ids[j]);
+                if (sim > 0.7) {
+                    double confianza = Math.min(1.0, 0.5 + sim * 0.5);
+                    for (String tipo : TIPOS) {
+                        result.add(new RelacionDetectada(origen, destino, tipo, confianza));
                     }
                 }
             }
@@ -405,30 +416,46 @@ public class IntelligentRelationAnalyzer {
      * Devuelve una nueva lista con las confianzas actualizadas.
      */
     List<RelacionDetectada> ajustarPorMemoria(List<RelacionDetectada> relaciones) {
-        Map<String, String> memoria = memoryService.getMemoria();
-        List<RelacionDetectada> resultado = new ArrayList<>();
+        return ajustarPorMemoria(relaciones, new NameSimilarityCache(List.of()));
+    }
+
+    private static final double MEMORY_THRESHOLD = 0.75;
+
+    /**
+     * Mismo cálculo que antes (media de similitud de origen, destino y tipo; umbral 0,75; +0,4 por
+     * aceptada y −0,5 por rechazada), pero con la memoria indexada: las claves se parsean una vez,
+     * las similitudes de nombres se cachean y, para cada origen, solo se recorren las decisiones
+     * que pueden superar el umbral. El orden de las sumas es el de la memoria, como antes.
+     */
+    private List<RelacionDetectada> ajustarPorMemoria(List<RelacionDetectada> relaciones, NameSimilarityCache sims) {
+        MemoryIndex index = MemoryIndex.build(memoryService.getMemoria(), sims);
+        List<RelacionDetectada> resultado = new ArrayList<>(relaciones.size());
+        Map<String, int[]> candidatesByOrigin = new HashMap<>();
 
         for (RelacionDetectada r : relaciones) {
             double boost = 0.0;
             boolean rechazada = false;
 
-            for (Map.Entry<String, String> entry : memoria.entrySet()) {
-                String clave = entry.getKey();
-                String decision = entry.getValue();
-                String[] partes = parseRelacion(clave);
-                if (partes == null) continue;
+            if (index.size() > 0) {
+                int originId = sims.id(r.getOrigen());
+                int destinoId = sims.id(r.getDestino());
+                int[] candidates = candidatesByOrigin.computeIfAbsent(r.getOrigen(),
+                    o -> index.candidates(originId, sims, MEMORY_THRESHOLD));
 
-                double simOrigen = SemanticSimilarity.compare(r.getOrigen(), partes[0]);
-                double simDestino = SemanticSimilarity.compare(r.getDestino(), partes[1]);
-                double simTipo = r.getTipo().equals(partes[2]) ? 1.0 : 0.5;
+                for (int c : candidates) {
+                    MemoryIndex.Entry entry = index.entry(c);
+                    double simOrigen = sims.sim(originId, entry.originId());
+                    double simDestino = sims.sim(destinoId, entry.destinoId());
+                    double simTipo = r.getTipo().equals(entry.key().tipo()) ? 1.0 : 0.5;
 
-                double similitud = (simOrigen + simDestino + simTipo) / 3.0;
+                    double similitud = (simOrigen + simDestino + simTipo) / 3.0;
 
-                if (similitud > 0.75) {
-                    if ("aceptada".equals(decision)) boost += similitud * 0.4;
-                    if ("rechazada".equals(decision)) {
-                        rechazada = true;
-                        boost -= similitud * 0.5;
+                    if (similitud > MEMORY_THRESHOLD) {
+                        if (entry.accepted()) boost += similitud * 0.4;
+                        if (entry.rejected()) {
+                            rechazada = true;
+                            boost -= similitud * 0.5;
+                        }
                     }
                 }
             }
@@ -450,19 +477,7 @@ public class IntelligentRelationAnalyzer {
 
         return resultado;
     }
-
-    /**
-     * Extrae las partes de una relación con formato "A -> B : Tipo".
-     */
-    private String[] parseRelacion(String texto) {
-        try {
-            String[] partes = texto.split(" -> | : ");
-            if (partes.length < 3) return null;
-            return new String[]{partes[0].trim(), partes[1].trim(), partes[2].trim()};
-        } catch (Exception e) {
-            return null;
-        }
-    }
+    
     
     /**
      * Gets the ML predictor for testing or external access.

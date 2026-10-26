@@ -11,14 +11,23 @@ import java.util.List;
  * @param isCollection whether the field is a collection type
  * @param genericType the generic type parameter if collection (e.g., "Order" from List<Order>)
  * @param annotations list of annotation names on the field
+ * @param mappedBy valor de {@code mappedBy} de la primera anotación JPA de relación, o null
  */
 public record FieldInfo(
     String name,
     String type,
     boolean isCollection,
     String genericType,
-    List<String> annotations
+    List<String> annotations,
+    String mappedBy
 ) {
+    /**
+     * Constructor sin {@code mappedBy} (el habitual).
+     */
+    public FieldInfo(String name, String type, boolean isCollection, String genericType, List<String> annotations) {
+        this(name, type, isCollection, genericType, annotations, null);
+    }
+
     /**
      * Creates a simple FieldInfo without annotations.
      */

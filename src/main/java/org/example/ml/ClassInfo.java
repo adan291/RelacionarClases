@@ -22,6 +22,8 @@ public class ClassInfo {
     private String superClass;
     private boolean hasIdField;
     private List<String> constructorParams;
+    /** true si viene de una interfaz (el análisis estructural y semántico también las usa). */
+    private boolean interfaceType;
     
     /**
      * Default constructor for JSON deserialization.
@@ -167,6 +169,14 @@ public class ClassInfo {
     
     public boolean hasIdField() {
         return hasIdField;
+    }
+
+    public boolean isInterfaceType() {
+        return interfaceType;
+    }
+
+    public void setInterfaceType(boolean interfaceType) {
+        this.interfaceType = interfaceType;
     }
     
     public void setHasIdField(boolean hasIdField) {

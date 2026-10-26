@@ -93,6 +93,59 @@ class AnalysisEquivalenceTest {
         }
     }
 
+    /**
+     * Mismo control sobre el análisis de un directorio (parseo de ficheros, anotaciones existentes).
+     */
+    @ParameterizedTest(name = "{0}")
+    @CsvSource({
+        "dir-sample-project, src/test/resources/sample-project",
+        "dir-ejemplos, src/main/java/org/example/ejemplos"
+    })
+    void directoryAnalysisMatchesGoldenOutput(String name, String dir) throws IOException {
+        Map<String, String> decisions = new java.util.LinkedHashMap<>();
+        String[] classes = {"User", "Order", "Product", "Category", "OrderItem",
+            "Cliente", "Pedido", "Empleado", "Empresa", "Oficina", "Ciudad", "Factura"};
+        String[] types = {"OneToOne", "OneToMany", "ManyToOne", "ManyToMany"};
+        for (int i = 0; i < 16; i++) {
+            decisions.put(classes[i % classes.length] + " -> " + classes[(i * 5 + 3) % classes.length]
+                + " : " + types[i % 4], i % 3 == 0 ? "rechazada" : "aceptada");
+        }
+        MemoryService memory = MemoryService.inMemory(decisions);
+        MLRelationPredictor predictor = MLRelationPredictor.inMemory(
+            memory, new FeatureExtractor(), new LogisticRegressionModel(42L), 10);
+        assertNotNull(predictor.ensureTrained());
+        IntelligentRelationAnalyzer analyzer = new IntelligentRelationAnalyzer(
+            memory, predictor, new ScoreCombiner(0.5, 0.3, 0.2), List.of("target", "build"), List.of(".java"));
+
+        List<RelacionDetectada> result = analyzer.analizar(Path.of(dir).toString());
+        List<String> actual = new ArrayList<>(result.stream()
+            .map(r -> format(r) + "|" + r.isExistingAnnotation()).toList());
+        // El orden de los ficheros en disco no está garantizado: se compara ordenado
+        actual.sort(null);
+        assertTrue(actual.size() > 5);
+
+        if (Boolean.getBoolean("golden.update")) {
+            Path out = Path.of("src", "test", "resources", "golden", name + ".txt");
+            Files.createDirectories(out.getParent());
+            Files.write(out, actual, StandardCharsets.UTF_8);
+            return;
+        }
+        List<String> expected = readGolden(name);
+        assertEquals(expected.size(), actual.size(), "Número de relaciones distinto");
+        for (int i = 0; i < expected.size(); i++) {
+            String[] e = expected.get(i).split("\\|", -1);
+            String[] a = actual.get(i).split("\\|", -1);
+            for (int f = 0; f < e.length; f++) {
+                if (f == 3) {
+                    assertTrue(Math.abs(Double.parseDouble(e[f]) - Double.parseDouble(a[f])) <= TOLERANCE,
+                        expected.get(i) + " / " + actual.get(i));
+                } else {
+                    assertEquals(e[f], a[f], expected.get(i) + " / " + actual.get(i));
+                }
+            }
+        }
+    }
+
     private static List<String> readGolden(String name) throws IOException {
         try (InputStream in = AnalysisEquivalenceTest.class.getResourceAsStream("/golden/" + name + ".txt")) {
             assertNotNull(in, "Falta la salida de referencia golden/" + name + ".txt");

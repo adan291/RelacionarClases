@@ -13,13 +13,16 @@ import java.util.Locale;
 import java.util.Set;
 import java.util.logging.Level;
 import java.util.logging.Logger;
-
 import org.example.model.RelacionDetectada;
 
 /**
  * Service for exporting relations to diagram formats.
  */
 public class DiagramExportService {
+
+    private static final java.util.regex.Pattern INVALID_FILENAME_CHARS =
+        java.util.regex.Pattern.compile("[^a-zA-Z0-9._-]");
+    private static final java.util.regex.Pattern MULTI_UNDERSCORE = java.util.regex.Pattern.compile("_+");
     
     private static final Logger logger = Logger.getLogger(DiagramExportService.class.getName());
     private static final DateTimeFormatter FILENAME_DATE_FORMAT = DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss");
@@ -96,8 +99,7 @@ public class DiagramExportService {
             return "diagram";
         }
         // Replace invalid filename characters with underscores
-        return name.replaceAll("[^a-zA-Z0-9._-]", "_")
-                   .replaceAll("_+", "_")
+        return MULTI_UNDERSCORE.matcher(INVALID_FILENAME_CHARS.matcher(name).replaceAll("_")).replaceAll("_")
                    .toLowerCase(Locale.ROOT);
     }
 
