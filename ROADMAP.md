@@ -97,6 +97,15 @@
 
 ---
 
+## 🌐 Fábrica de backends
+
+### M-1.1 ✅ API REST
+- ✅ `org.example.api.RelationsApiServer` (Javalin) en `127.0.0.1:8090`, contrato 3.2 de `docs/FABRICA.md`
+- ✅ `POST /relations/suggest`, `POST /relations/feedback` (reentreno en segundo plano), `GET /health`
+- ✅ Jar ejecutable `-api.jar`; arranque y variables en el README
+
+---
+
 ## 🔌 Integraciones (Prioridad Baja)
 
 ### 12. Plugin para IDEs
@@ -155,7 +164,7 @@
 | Métrica | Actual | Objetivo |
 |---------|--------|----------|
 | Precisión ML | ~70% | >85% |
-| Tiempo análisis 100 clases | ~5s | <2s |
+| Tiempo análisis 200 clases (JMH, en memoria) | 0,16 s (antes 3,7 s) | <2s |
 | Decisiones para ML activo | 5 | 3 |
 | Tipos de relación soportados | 4 | 6+ |
 

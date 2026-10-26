@@ -12,7 +12,7 @@ El sistema aprende de las decisiones del usuario (aceptar o rechazar relaciones)
 🚀 Ejecución del Proyecto
 1️⃣ Requisitos
 
-Java 21
+Java 25 (JDK 28 EA con Valhalla solo para el perfil `valhalla`)
 
 Maven 3.9+
 
@@ -25,9 +25,29 @@ Desde la raíz del proyecto, ejecuta:
 mvn clean javafx:run
 
 
-Si usas IntelliJ IDEA o VS Code, también puedes ejecutar directamente la clase:
+Si usas IntelliJ IDEA o VS Code, también puedes ejecutar directamente la clase `org.example.App`
+(con `--enable-native-access=javafx.graphics` en las opciones de la JVM para evitar el aviso de JavaFX 25).
 
-org.example.App
+Tests: `mvn -B verify` (los de UI y rendimiento están excluidos por etiqueta).
+
+Versiones principales: JavaFX 25.0.5, JavaParser 3.27.1 (`LanguageLevel.JAVA_21`, el máximo de esa serie), Javalin 7.2.4, Gson 2.15.0, JUnit 5.13.4, jqwik 1.9.3.
+
+Fuentes alternativas: `FieldInfo`, `RelationKey`, `PairScore` y `ScoreInfo` están en `src/main/java25` (record) y `src/main/java28` (value record). Maven añade la carpeta que toque con build-helper; en el IDE marca `src/main/java25` como carpeta de fuentes.
+
+Perfil Valhalla (JEP 401, preview):
+
+```powershell
+$env:JAVA_HOME="$env:USERPROFILE\.jdks\jdk-28"
+mvn -B -Pvalhalla verify
+java --enable-preview -jar target\detection-relations-1.0-SNAPSHOT-api.jar
+```
+
+Benchmarks JMH (perfil `bench`, resultados y conclusiones en `docs/BENCHMARK.md`):
+
+```powershell
+mvn -B -Pbench test-compile exec:exec
+mvn -B "-Pvalhalla,bench" test-compile exec:exec    # con JAVA_HOME en el JDK 28
+```
 
 🧱 Estructura del Proyecto
 src/main/java/org/example/
