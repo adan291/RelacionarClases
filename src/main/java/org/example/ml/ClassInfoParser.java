@@ -149,13 +149,9 @@ public class ClassInfoParser {
         Map<String, ClassInfo> result = new LinkedHashMap<>();
         
         CompilationUnit cu = JavaParsers.parse(file);
-        String packageName = cu.getPackageDeclaration()
-            .map(pd -> pd.getNameAsString())
-            .orElse("");
-        
         cu.findAll(ClassOrInterfaceDeclaration.class).forEach(clazz -> {
             if (!clazz.isInterface() || includeInterfaces) {
-                ClassInfo classInfo = parseClass(clazz, packageName);
+                ClassInfo classInfo = parseClass(clazz);
                 classInfo.setInterfaceType(clazz.isInterface());
                 result.put(classInfo.getClassName(), classInfo);
             }
@@ -168,10 +164,9 @@ public class ClassInfoParser {
      * Parses a class declaration and extracts all relevant information.
      * 
      * @param clazz the class declaration
-     * @param packageName the package name
      * @return populated ClassInfo
      */
-    private ClassInfo parseClass(ClassOrInterfaceDeclaration clazz, String packageName) {
+    private ClassInfo parseClass(ClassOrInterfaceDeclaration clazz) {
         ClassInfo classInfo = new ClassInfo(clazz.getNameAsString());
         
         // Parse interfaces
@@ -286,7 +281,7 @@ public class ClassInfoParser {
             
             return cu.findFirst(ClassOrInterfaceDeclaration.class)
                 .filter(c -> !c.isInterface())
-                .map(c -> parseClass(c, ""))
+                .map(c -> parseClass(c))
                 .orElse(null);
         } catch (Exception e) {
             LOGGER.log(Level.WARNING, e, () -> "Error parsing source code");
