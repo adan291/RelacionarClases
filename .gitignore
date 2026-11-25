@@ -54,3 +54,6 @@ test_model_sufficient_*.json
 .jqwik-database
 .project-checker/
 .qodo/
+.env
+.env.*
+!.env.example
